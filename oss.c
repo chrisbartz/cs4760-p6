@@ -21,9 +21,9 @@
 #define VERBOSE 0						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
 
-#define PRIQUEUEHI 5000					// this is the time limit of the hi priority queue
-#define PRIQUEUEMED 500000				// this is the time limit of the med priority queue
-#define PRIQUEUELO 50000000				// this is the time limit of the lo priority queue
+//#define PRIQUEUEHI 5000					// this is the time limit of the hi priority queue
+//#define PRIQUEUEMED 500000				// this is the time limit of the med priority queue
+//#define PRIQUEUELO 50000000				// this is the time limit of the lo priority queue
 
 const int maxChildProcessCount = 100; 	// limit of total child processes spawned
 const long maxWaitInterval = 3L;		// limit on how many seconds to wait until we spawn the next child
@@ -43,9 +43,9 @@ long long totalWaitTime;
 int totalProcesses;
 long long totalCpuIdleTime;
 
-const int hipri = 0;					// index of priority queues
-const int medpri = 1;
-const int lopri = 2;
+//const int hipri = 0;					// index of priority queues
+//const int medpri = 1;
+//const int lopri = 2;
 
 FILE *logFile;
 
