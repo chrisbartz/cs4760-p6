@@ -17,7 +17,7 @@
 #include "timestamp.h"
 #include "queue.h"
 
-#define DEBUG 0							// setting to 1 greatly increases number of logging events
+#define DEBUG 1							// setting to 1 greatly increases number of logging events
 #define VERBOSE 0						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
 
@@ -26,7 +26,7 @@
 //#define PRIQUEUELO 50000000				// this is the time limit of the lo priority queue
 
 const int maxChildProcessCount = 100; 	// limit of total child processes spawned
-const long maxWaitInterval = 3L;		// limit on how many seconds to wait until we spawn the next child
+const long maxWaitInterval = 500;		// limit on how many milliseconds to wait until we spawn the next child
 
 int totalChildProcessCount = 0; 		// number of total child processes spawned
 int signalIntercepted = 0; 				// flag to keep track when sigint occurs
@@ -57,13 +57,14 @@ pid_t childpids[5000]; 					// keep track of all spawned child pids
 
 void signal_handler(int signalIntercepted); 	// handle sigint interrupt
 void increment_clock(int offset); 				// update oss clock in shared memory
+void increment_clock_values(int seconds, int uSeconds, int offset); // increment a local value
 void kill_detach_destroy_exit(int status); 		// kill off all child processes and shared memory
 
 int pcbMapNextAvailableIndex();						// find next available pcb
 void pcbAssign(int pcbMap[], int index, int pid);	// assign process to pcb
 void pcbDelete(int pcbMap[], int index);			// delete and clear pcb
 int pcbFindIndex(int pid);							// find pcb index of a pid
-int pcbDispatch(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[3]); // dispatch the next priority pcb
+//int pcbDispatch(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[3]); // dispatch the next priority pcb
 void pcbUpdateStats(int pcbIndex);					// bookkeeping
 void pcbAssignQueue(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[], int pcbIndex); // intelligently assign a pcb a queue
 void pcbUpdateTotalStats(int pcbIndex);				// update total stats for after action report
@@ -79,23 +80,24 @@ int main(int argc, char *argv[]) {
 	int maxOssTimeLimitSeconds = 10000;	// max run time in oss seconds
 	char logFileName[50]; 				// name of log file
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
-	int totalRunSeconds = 20; 			// set default total run time in seconds
+	int totalRunSeconds = 2; 			// set default total run time in seconds
 	int goClock = 0;					// triggers the time keeping
 
 	int pcbMap[MAX_PROCESS_CONTROL_BLOCKS];// for keeping track of used pcb blocks
 
 	// set up priority queues
-	int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS]; 						// the actual priority queue array; stores pcb #
-	int priQueueQuantums[] = {PRIQUEUEHI, PRIQUEUEMED, PRIQUEUELO};		// the quantum values of the queues
+//	int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS]; 						// the actual priority queue array; stores pcb #
+//	int priQueueQuantums[] = {PRIQUEUEHI, PRIQUEUEMED, PRIQUEUELO};		// the quantum values of the queues
 
-	initialize(priQueues[hipri]);
-	initialize(priQueues[medpri]);
-	initialize(priQueues[lopri]);
+//	initialize(priQueues[hipri]);
+//	initialize(priQueues[medpri]);
+//	initialize(priQueues[lopri]);
 
 	time_t t;
 	srand(getpid()); 					// random generator
 	int interval = (rand() % maxWaitInterval);
-	long nextChildTime;	// save the next scheduled time for a child to be spawned
+	int nextChildTimeSeconds;	// save the next scheduled time for a child to be spawned
+	int nextChildTimeUSeconds;	// save the next scheduled time for a child to be spawned
 
 	//gather option flags
 	while ((opt = getopt(argc, argv, "hl:q:s:t:")) != -1) {
@@ -154,8 +156,8 @@ int main(int argc, char *argv[]) {
 
 	p_shmMsg->ossSeconds = 0;
 	p_shmMsg->ossUSeconds = 0;
-	p_shmMsg->dispatchedPid = 0;
-	p_shmMsg->dispatchedTime = 0;
+//	p_shmMsg->dispatchedPid = 0;
+//	p_shmMsg->dispatchedTime = 0;
 
 	// initialize pcbMap and pcbs
 	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++)
@@ -246,8 +248,8 @@ int main(int argc, char *argv[]) {
 			if (DEBUG && VERBOSE) printf( "OSS  %s: DISPATCHED PROCESS COUNT: %d\nMAX DISPATCHED PROCESS COUNT: %d\n", timeVal, dispatchedProcessCount, maxDispatchedProcessCount);
 
 			// we do this check to make sure we have a number of dispatched child processes
-			if (dispatchedProcessCount < maxDispatchedProcessCount)
-				dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums);
+//			if (dispatchedProcessCount < maxDispatchedProcessCount)
+//				dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums);
 
 			// wait for child to send message
 			if (p_shmMsg->userPid == 0)
@@ -256,24 +258,24 @@ int main(int argc, char *argv[]) {
 			int pcbIndex = pcbFindIndex(p_shmMsg->userPid);	// find pcb index
 			getTime(timeVal);
 
-			if (p_shmMsg->userHaltSignal) { 	// the user process is halting after the end of its time
-				if (DEBUG) printf("OSS  %s: Child %d is halting at my time %d.%09d\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
-
-				// book keeping
-				pcbUpdateStats(pcbIndex);
-				pcbAssignQueue(priQueues, priQueueQuantums, pcbIndex);
-				dispatchedProcessCount--;
-
-				// clear the child signal
-				p_shmMsg->userPid = 0;
-				p_shmMsg->userHaltSignal = 0;
-				p_shmMsg->userHaltTime = 0;
-
-				// dispatch next process
-				dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums);
-
-				continue;
-			} else { 							// the user process is terminating
+//			if (p_shmMsg->userHaltSignal) { 	// the user process is halting after the end of its time
+//				if (DEBUG) printf("OSS  %s: Child %d is halting at my time %d.%09d\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
+//
+//				// book keeping
+//				pcbUpdateStats(pcbIndex);
+//				pcbAssignQueue(priQueues, priQueueQuantums, pcbIndex);
+//				dispatchedProcessCount--;
+//
+//				// clear the child signal
+//				p_shmMsg->userPid = 0;
+//				p_shmMsg->userHaltSignal = 0;
+//				p_shmMsg->userHaltTime = 0;
+//
+//				// dispatch next process
+//				dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums);
+//
+//				continue;
+//			} else { 							// the user process is terminating
 				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
 				// book keeping
@@ -287,7 +289,7 @@ int main(int argc, char *argv[]) {
 				p_shmMsg->userPid = 0;
 				p_shmMsg->userHaltSignal = 0;
 				p_shmMsg->userHaltTime = 0;
-			}
+//			}
 
 		}
 
@@ -297,7 +299,7 @@ int main(int argc, char *argv[]) {
 		// if there are less than the number of max concurrent child processes we create a new one if possible
 		if (childProcessCount < maxConcSlaveProcesses) {
 
-			if (goClock && getUnixTime() < nextChildTime){	// limit the number of children spawned by time
+			if (goClock && nextChildTimeSeconds >= ossSeconds && nextChildTimeUSeconds > ossUSeconds) {	// limit the number of children spawned by time
 				continue;
 			}
 
@@ -343,17 +345,17 @@ int main(int argc, char *argv[]) {
 			if (childpid != 0) {
 
 				pcbAssign(pcbMap, assignedPcb, childpid);		// assign forked pid to pcb
-				push_back(priQueues[hipri], assignedPcb);		// push the new pcb to the back of the hipri queue
-
-				if (!childrenDispatching) {
-					childrenDispatching = 1;
-					dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums); // dispatch the first child process
-				}
+//				push_back(priQueues[hipri], assignedPcb);		// push the new pcb to the back of the hipri queue
+//
+//				if (!childrenDispatching) {
+//					childrenDispatching = 1;
+//					dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums); // dispatch the first child process
+//				}
 
 				childpids[totalChildProcessCount] = childpid; 	// save child pids in an array
 				childProcessCount++; // increment current child process count
 				totalChildProcessCount++; // increment total child process count
-				nextChildTime = getUnixTime() + (((long) rand() % maxWaitInterval) * 1000L); // decide on when to create the next child
+				increment_clock_values(nextChildTimeSeconds, nextChildTimeUSeconds, ( rand() % maxWaitInterval));
 
 				getTime(timeVal);
 				if (DEBUG && VERBOSE) printf( "OSS  %s: Process %d CHILD PROCESS COUNT: %d\n", timeVal, getpid(), childProcessCount);
@@ -404,6 +406,26 @@ void increment_clock(int offset) {
 	p_shmMsg->ossSeconds = ossSeconds;
 	p_shmMsg->ossUSeconds = ossUSeconds;
 
+}
+
+void increment_clock_values(int seconds, int uSeconds, int offset) {
+	const int oneBillion = 1000000000;
+
+	int localOssSeconds = ossSeconds;
+	int localOssUSeconds = ossUSeconds;
+
+	localOssUSeconds += offset;
+
+	if (localOssUSeconds >= oneBillion) {
+		localOssSeconds++;
+		localOssUSeconds -= oneBillion;
+	}
+
+	seconds = localOssSeconds;
+	uSeconds = localOssUSeconds;
+
+	if (0 && DEBUG && VERBOSE)
+			printf("master: updating clock values by %d ms to %d.%09d\n", offset, ossSeconds, ossUSeconds);
 }
 
 void kill_detach_destroy_exit(int status) {
@@ -464,22 +486,22 @@ int pcbMapNextAvailableIndex(int pcbMap[]) {
 	 return -1;
  }
 
- int pcbDispatch(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[]) {
- 	 for (int i = 0; i < 3; i++) {
- 		 if (DEBUG && VERBOSE) printQueue(priQueues[i]);
- 		 int pcbIndex = pop(priQueues[i]);
- 		 if (pcbIndex > -1) {
- 			 p_shmMsg->dispatchedPid = p_shmMsg->pcb[pcbIndex].pid;
- 			 p_shmMsg->dispatchedTime = priQueueQuantums[i] - p_shmMsg->pcb[pcbIndex].lastBurstLength;
-
- 			 getTime(timeVal);
- 			 printf("OSS  %s: Dispatching process with PID %d from queue %d at time %d.%09d\n", timeVal, p_shmMsg->pcb[pcbIndex].pid, i, ossSeconds, ossUSeconds);
- 			 fprintf(logFile, "OSS  %s: Dispatching process with PID %d from queue %d at time %d.%09d\n", timeVal, p_shmMsg->pcb[pcbIndex].pid, i, ossSeconds, ossUSeconds);
- 			 return 1;
- 		 }
- 	 }
- 	 return 0;
-  }
+// int pcbDispatch(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[]) {
+// 	 for (int i = 0; i < 3; i++) {
+// 		 if (DEBUG && VERBOSE) printQueue(priQueues[i]);
+// 		 int pcbIndex = pop(priQueues[i]);
+// 		 if (pcbIndex > -1) {
+// 			 p_shmMsg->dispatchedPid = p_shmMsg->pcb[pcbIndex].pid;
+// 			 p_shmMsg->dispatchedTime = priQueueQuantums[i] - p_shmMsg->pcb[pcbIndex].lastBurstLength;
+//
+// 			 getTime(timeVal);
+// 			 printf("OSS  %s: Dispatching process with PID %d from queue %d at time %d.%09d\n", timeVal, p_shmMsg->pcb[pcbIndex].pid, i, ossSeconds, ossUSeconds);
+// 			 fprintf(logFile, "OSS  %s: Dispatching process with PID %d from queue %d at time %d.%09d\n", timeVal, p_shmMsg->pcb[pcbIndex].pid, i, ossSeconds, ossUSeconds);
+// 			 return 1;
+// 		 }
+// 	 }
+// 	 return 0;
+//  }
 
  void pcbUpdateStats(int pcbIndex) {
 	 p_shmMsg->pcb[pcbIndex].lastBurstLength = p_shmMsg->userHaltTime;

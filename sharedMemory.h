@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 
 typedef struct {
-	int request;
+	int resourceId;
 } SmResourceDescriptorInstance;
 
 typedef struct {
@@ -47,16 +47,20 @@ typedef struct {
 	int lastBurstLength;
 	int processPriority;
 	int pid;
+	int resources[100];
 } SmProcessControlBlock;
 
 typedef struct {
 	int ossSeconds;
 	int ossUSeconds;
-	int dispatchedPid;
-	int dispatchedTime;
+//	int dispatchedPid;
+//	int dispatchedTime;
 	int userPid;
 	int userHaltSignal; // 0 terminated 1 halted
 	int userHaltTime;
+	int userResource;
+	int userRequestOrRelease; // 0 request 1 release
+	int userGrantedResource;
 	SmProcessControlBlock pcb[MAX_PROCESS_CONTROL_BLOCKS];
 	SmResourceDescriptor resDesc[MAX_RESOURCE_DESCRIPTORS];
 } SmStruct;
