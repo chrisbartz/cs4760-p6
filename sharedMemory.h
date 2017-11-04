@@ -56,10 +56,10 @@ typedef struct {
 //	int dispatchedPid;
 //	int dispatchedTime;
 	int userPid;
-	int userHaltSignal; // 0 terminated 1 halted
+	int userHaltSignal; // 1 terminated
 	int userHaltTime;
 	int userResource;
-	int userRequestOrRelease; // 0 request 1 release
+	int userRequestOrRelease; // 0 none 1 request 2 release
 	int userGrantedResource;
 	SmProcessControlBlock pcb[MAX_PROCESS_CONTROL_BLOCKS];
 	SmResourceDescriptor resDesc[MAX_RESOURCE_DESCRIPTORS];

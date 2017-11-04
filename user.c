@@ -54,7 +54,7 @@ if (DEBUG) printf("user %s: PCBINDEX: %d\n", timeVal, pcbIndex);
 srand(getpid()); // random generator
 luckyNumber = rand() % MAX_LUCKY_NUMBER;
 
-int processTimeRequired = rand() % (MAX_WORK_INTERVAL);
+//int processTimeRequired = rand() % (MAX_WORK_INTERVAL);
 const int oneBillion = 1000000000;
 
 // a quick check to make sure user received a child id
@@ -63,7 +63,7 @@ if (childId < 0) {
 	if (DEBUG) printf("user %s: Something wrong with child id: %d\n", timeVal, getpid());
 	exit(1);
 } else {
-	if (DEBUG) printf("user %s: child %d (#%d) simulated work load: %d started normally after execl\n", timeVal, (int) getpid(), childId, processTimeRequired);
+	if (DEBUG) printf("user %s: child %d (#%d) started normally after execl\n", timeVal, (int) getpid(), childId);
 
 	// instantiate shared memory from oss
 	getTime(timeVal);
@@ -115,6 +115,12 @@ if (childId < 0) {
 				continue;
 			} else {
 				// then resource has been granted
+				getTime(timeVal);
+				printf("user %s: Receiving that process %d has been granted resource %d\n", timeVal, (int) getpid(), p_shmMsg->userResource);
+
+				// do other stuff here
+
+
 				sem_wait(sem);
 				p_shmMsg->userPid = 0;
 				p_shmMsg->userRequestOrRelease = 0;
@@ -131,7 +137,7 @@ if (childId < 0) {
 				// request a resource
 				sem_wait(sem);
 				p_shmMsg->userPid = getpid();
-				p_shmMsg->userRequestOrRelease = 0;
+				p_shmMsg->userRequestOrRelease = 1;
 				p_shmMsg->userResource = rand() % MAX_RESOURCE_COUNT;
 				sem_post(sem);
 				requestedAResource = 1;
@@ -151,7 +157,7 @@ if (childId < 0) {
 				if (releasedResource) {
 					sem_wait(sem);
 					p_shmMsg->userPid = getpid();
-					p_shmMsg->userRequestOrRelease = 1;
+					p_shmMsg->userRequestOrRelease = 2;
 					p_shmMsg->userResource = releasedResource;
 					sem_post(sem);
 				}
@@ -273,6 +279,5 @@ void increment_user_clock_values(int ossSeconds, int ossUSeconds, int seconds, i
 	seconds = localOssSeconds;
 	uSeconds = localOssUSeconds;
 
-	if (DEBUG)
-				printf("user: updating user wait time values by %d ms to %d.%09d\n", offset, ossSeconds, ossUSeconds);
+	if (DEBUG) printf("user: updating user wait time values by %d ms to %d.%09d\n", offset, ossSeconds, ossUSeconds);
 }
