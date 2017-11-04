@@ -35,7 +35,7 @@ int exitUSeconds;			// store oss nanoseconds when exiting
 
 int userWaitSeconds;		// the next time the user process makes a resource decision
 int userWaitUSeconds;		// the next time the user process makes a resource decision
-int luckyNumber = rand() % MAX_LUCKY_NUMBER; // a random number to determine if the process terminates
+int luckyNumber; // a random number to determine if the process terminates
 int requestedAResource = 0;
 
 char timeVal[30]; // formatted time values for logging
@@ -52,6 +52,8 @@ getTime(timeVal);
 if (DEBUG) printf("user %s: PCBINDEX: %d\n", timeVal, pcbIndex);
 
 srand(getpid()); // random generator
+luckyNumber = rand() % MAX_LUCKY_NUMBER;
+
 int processTimeRequired = rand() % (MAX_WORK_INTERVAL);
 const int oneBillion = 1000000000;
 

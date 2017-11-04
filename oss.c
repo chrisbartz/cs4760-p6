@@ -361,11 +361,11 @@ int main(int argc, char *argv[]) {
 				if (DEBUG && VERBOSE) printf( "OSS  %s: Process %d CHILD PROCESS COUNT: %d\n", timeVal, getpid(), childProcessCount);
 
 				getTime(timeVal);
-				if (DEBUG || TUNING)
-					printf("OSS  %s: Generating process with PID %d and putting it in queue %d at time %d.%09d\n",
-							timeVal, (int) childpid, hipri, ossSeconds, ossUSeconds);
-				fprintf(logFile, "OSS  %s: Generating process with PID %d and putting it in queue %d at time %d.%09d\n",
-						timeVal, (int) childpid, hipri, ossSeconds, ossUSeconds);
+//				if (DEBUG || TUNING)
+//					printf("OSS  %s: Generating process with PID %d and putting it in queue %d at time %d.%09d\n",
+//							timeVal, (int) childpid, hipri, ossSeconds, ossUSeconds);
+//				fprintf(logFile, "OSS  %s: Generating process with PID %d and putting it in queue %d at time %d.%09d\n",
+//						timeVal, (int) childpid, hipri, ossSeconds, ossUSeconds);
 
 			}
 
@@ -514,23 +514,23 @@ int pcbMapNextAvailableIndex(int pcbMap[]) {
 	 fprintf(logFile, "OSS  %s: Receiving that process with PID %d ran for %d nanoseconds\n", timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].lastBurstLength);
  }
 
- void pcbAssignQueue(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[], int pcbIndex) {
-	 int assignedQueue;
-	 if (p_shmMsg->pcb[pcbIndex].totalCpuTime < priQueueQuantums[hipri]) {
-		 push_back(priQueues[hipri], pcbIndex); // put into hipri queue
-		 assignedQueue = hipri;
-	 } else if (p_shmMsg->pcb[pcbIndex].totalCpuTime - priQueueQuantums[hipri] < priQueueQuantums[medpri]) {
-		 push_back(priQueues[medpri], pcbIndex); // put into medpri queue
-		 assignedQueue = medpri;
-	 } else {
-		 push_back(priQueues[lopri], pcbIndex); // put into lopri queue
-		 assignedQueue = lopri;
-	 }
-
-	 getTime(timeVal);
-	 printf("OSS  %s: Putting process with PID %d into queue %d \n", timeVal, p_shmMsg->pcb[pcbIndex].pid, assignedQueue);
-	 fprintf(logFile, "OSS  %s: Putting process with PID %d into queue %d \n", timeVal, p_shmMsg->pcb[pcbIndex].pid, assignedQueue);
- }
+// void pcbAssignQueue(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[], int pcbIndex) {
+//	 int assignedQueue;
+//	 if (p_shmMsg->pcb[pcbIndex].totalCpuTime < priQueueQuantums[hipri]) {
+//		 push_back(priQueues[hipri], pcbIndex); // put into hipri queue
+//		 assignedQueue = hipri;
+//	 } else if (p_shmMsg->pcb[pcbIndex].totalCpuTime - priQueueQuantums[hipri] < priQueueQuantums[medpri]) {
+//		 push_back(priQueues[medpri], pcbIndex); // put into medpri queue
+//		 assignedQueue = medpri;
+//	 } else {
+//		 push_back(priQueues[lopri], pcbIndex); // put into lopri queue
+//		 assignedQueue = lopri;
+//	 }
+//
+//	 getTime(timeVal);
+//	 printf("OSS  %s: Putting process with PID %d into queue %d \n", timeVal, p_shmMsg->pcb[pcbIndex].pid, assignedQueue);
+//	 fprintf(logFile, "OSS  %s: Putting process with PID %d into queue %d \n", timeVal, p_shmMsg->pcb[pcbIndex].pid, assignedQueue);
+// }
 
 void pcbUpdateTotalStats(int pcbIndex) {
 	totalProcesses++;
