@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
 	int maxOssTimeLimitSeconds = 10000; // max run time in oss seconds
 	char logFileName[50]; // name of log file
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
-	int totalRunSeconds = 2; // set default total run time in seconds
+	int totalRunSeconds = 2; // set default total run time in real seconds
 	int goClock = 0; // triggers the time keeping
 
 	int pcbMap[MAX_PROCESS_CONTROL_BLOCKS]; // for keeping track of used pcb blocks
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
 			if (ossSeconds > maxOssTimeLimitSeconds)
 				strncpy(typeOfLimit, "because of OSS time limit", 50);
 			if (timeToStop != 0 && timeToStop < getUnixTime())
-				strncpy(typeOfLimit, "because of real time limit (20s)", 50);
+				strncpy(typeOfLimit, "because of real time limit (2s)", 50);
 
 			getTime(timeVal);
 			printf(
@@ -254,7 +254,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		getTime(timeVal);
-		if (DEBUG && VERBOSE) printf("OSS  %s: CHILD PROCESS COUNT: %d\nMAX CONC PROCESS COUNT: %d\n",
+		if (0 && DEBUG && VERBOSE) printf("OSS  %s: CHILD PROCESS COUNT: %d\nMAX CONC PROCESS COUNT: %d\n",
 					timeVal, childProcessCount, maxConcSlaveProcesses);
 
 		// if we have forked up to the max concurrent child processes
@@ -455,8 +455,7 @@ void trim_newline(char *string) {
 
 // handle the ^C interrupt
 void signal_handler(int signal) {
-	if (DEBUG)
-		printf("\nmaster: //////////// Encountered signal! //////////// \n\n");
+	if (DEBUG) printf("\nmaster: //////////// Encountered signal! //////////// \n\n");
 	signalIntercepted = 1;
 }
 
@@ -470,9 +469,7 @@ void increment_clock(int offset) {
 		ossUSeconds -= oneBillion;
 	}
 
-	if (DEBUG && VERBOSE)
-		printf("master: updating oss clock to %d.%09d\n", ossSeconds,
-				ossUSeconds);
+	if (0 && DEBUG && VERBOSE) printf("master: updating oss clock to %d.%09d\n", ossSeconds, ossUSeconds);
 	p_shmMsg->ossSeconds = ossSeconds;
 	p_shmMsg->ossUSeconds = ossUSeconds;
 
@@ -494,17 +491,13 @@ void increment_clock_values(int seconds, int uSeconds, int offset) {
 	seconds = localOssSeconds;
 	uSeconds = localOssUSeconds;
 
-	if (0 && DEBUG && VERBOSE)
-		printf("master: updating clock values by %d ms to %d.%09d\n", offset,
-				ossSeconds, ossUSeconds);
+	if (0 && DEBUG && VERBOSE) printf("master: updating clock values by %d ms to %d.%09d\n", offset, ossSeconds, ossUSeconds);
 }
 
 void kill_detach_destroy_exit(int status) {
 	// kill all running child processes
 	for (int p = 0; p < totalChildProcessCount; p++) {
-		if (DEBUG)
-			printf(
-					"master: //////////// oss terminating child process %d //////////// \n",
+		if (DEBUG) printf("master: //////////// oss terminating child process %d //////////// \n",
 					(int) childpids[p]);
 		kill(childpids[p], SIGTERM);
 	}
@@ -536,16 +529,13 @@ void pcbAssign(int pcbMap[], int index, int pid) {
 	p_shmMsg->pcb[index].pid = pid;
 
 	getTime(timeVal);
-	if (DEBUG)
-		printf("OSS  %s: Assigning child %d pcb at %d.%09d\n", timeVal,
-				p_shmMsg->pcb[index].pid, ossSeconds, ossUSeconds);
+	if (DEBUG) printf("OSS  %s: Assigning child %d pcb at %d.%09d\n", timeVal, p_shmMsg->pcb[index].pid, ossSeconds, ossUSeconds);
 }
 
 void pcbDelete(int pcbMap[], int index) {
 	getTime(timeVal);
 	if (DEBUG)
-		printf("OSS  %s: Deleting child %d pcb at %d.%09d\n", timeVal,
-				p_shmMsg->pcb[index].pid, ossSeconds, ossUSeconds);
+		printf("OSS  %s: Deleting child %d pcb at %d.%09d\n", timeVal, p_shmMsg->pcb[index].pid, ossSeconds, ossUSeconds);
 
 	pcbMap[index] = 0;
 	p_shmMsg->pcb[index].lastBurstLength = 0;
@@ -558,8 +548,7 @@ void pcbDelete(int pcbMap[], int index) {
 int pcbFindIndex(int pid) {
 	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
 		if (p_shmMsg->pcb[i].pid == pid) {
-			if (DEBUG)
-				printf("OSS  %s: found pcbIndex: %d\n", timeVal, i);
+			if (DEBUG) printf("OSS  %s: found pcbIndex: %d\n", timeVal, i);
 			return i;
 		}
 	}
@@ -621,27 +610,19 @@ void pcbUpdateTotalStats(int pcbIndex) {
 	totalProcesses++;
 
 	// my interpretation of the turnaround time is the (OSS) time it takes a process to complete, including wait time
-	long long totalSeconds = abs(
-			p_shmMsg->pcb[pcbIndex].endUserSeconds
-					- p_shmMsg->pcb[pcbIndex].startUserSeconds);
-	long long totalUSeconds = abs(
-			p_shmMsg->pcb[pcbIndex].endUserUSeconds
-					- p_shmMsg->pcb[pcbIndex].startUserUSeconds);
-	totalTurnaroundTime +=
-			((totalSeconds * 1000 * 1000 * 1000) + totalUSeconds);
+	long long totalSeconds = abs(p_shmMsg->pcb[pcbIndex].endUserSeconds - p_shmMsg->pcb[pcbIndex].startUserSeconds);
+	long long totalUSeconds = abs(p_shmMsg->pcb[pcbIndex].endUserUSeconds - p_shmMsg->pcb[pcbIndex].startUserUSeconds);
+	totalTurnaroundTime += ((totalSeconds * 1000 * 1000 * 1000) + totalUSeconds);
 
 	// total wait time is calculated by taking the turnaround time and subtracting the cpu time
-	totalWaitTime +=
-			(totalTurnaroundTime - p_shmMsg->pcb[pcbIndex].totalCpuTime);
+	totalWaitTime += (totalTurnaroundTime - p_shmMsg->pcb[pcbIndex].totalCpuTime);
 }
 
 void pcbDisplayTotalStats() {
-	printf(
-			"Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
+	printf("Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
-	fprintf(logFile,
-			"Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
+	fprintf(logFile,"Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
 }

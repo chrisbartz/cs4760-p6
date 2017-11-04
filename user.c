@@ -14,11 +14,12 @@
 #include "queue.h"
 
 #define DEBUG 1 			// setting to 1 greatly increases number of logging events
+#define VERBOSE 0 			// setting to 1 greatly increases number of logging events
 #define TUNING 0
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
 #define BINARY_CHOICE 2
-#define MAX_RESOURCE_WAIT 100
-#define MAX_LUCKY_NUMBER 50
+#define MAX_RESOURCE_WAIT 100 * 1000 * 1000
+#define MAX_LUCKY_NUMBER 100
 
 SmStruct shmMsg;
 SmStruct *p_shmMsg;
@@ -41,8 +42,8 @@ int requestedAResource = 0;
 char timeVal[30]; // formatted time values for logging
 
 void do_work(int willRunForThisLong);
-
-void increment_user_clock_values(int ossSeconds, int ossUSeconds, int seconds, int uSeconds, int offset);
+void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset);
+int get_random(int modulus);
 
 int main(int argc, char *argv[]) {
 childId = atoi(argv[0]); // saves the child id passed from the parent process
@@ -51,8 +52,8 @@ pcbIndex = atoi(argv[1]); // saves the pcb index passed from the parent process
 getTime(timeVal);
 if (DEBUG) printf("user %s: PCBINDEX: %d\n", timeVal, pcbIndex);
 
-srand(getpid()); // random generator
-luckyNumber = rand() % MAX_LUCKY_NUMBER;
+srand(getpid());
+luckyNumber = get_random(MAX_LUCKY_NUMBER);
 
 //int processTimeRequired = rand() % (MAX_WORK_INTERVAL);
 const int oneBillion = 1000000000;
@@ -95,7 +96,9 @@ if (childId < 0) {
 	timeperiod.tv_sec = 0;
 	timeperiod.tv_nsec = 5 * 10000;
 
-	increment_user_clock_values(p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds, userWaitSeconds, userWaitUSeconds, ( rand() % MAX_RESOURCE_WAIT));
+	increment_user_wait_values(p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds,  get_random(MAX_RESOURCE_WAIT));
+	getTime(timeVal);
+	if (DEBUG) printf("user %s: child %d set resource wait to: %d.%09d\n", timeVal, (int) getpid(), userWaitSeconds, userWaitUSeconds);
 
 	while (1) { // main while loop
 
@@ -104,8 +107,18 @@ if (childId < 0) {
 				nanosleep(&timeperiod, NULL); // reduce the cpu load from looping
 			} else {
 				// make decision about whether to terminate
-				if (rand() % MAX_LUCKY_NUMBER == luckyNumber)
+				int guess = (get_random(MAX_LUCKY_NUMBER));
+				if (guess == luckyNumber) {
+					getTime(timeVal);
+					if (DEBUG) printf("user %s: user %d determined that guess = %d and luckyNumber = %d and it is time to terminate at %d.%09d\n",
+							timeVal, (int) getpid(), guess, luckyNumber, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 					break;
+				} else {
+					if (VERBOSE && DEBUG) printf("user %s: user %d determined that guess = %d and luckyNumber = %d and it is NOT time to terminate at %d.%09d\n",
+								timeVal, (int) getpid(), guess, luckyNumber, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
+					increment_user_wait_values(p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds,  get_random(MAX_RESOURCE_WAIT));
+				}
+
 			}
 
 		// check for requested resource
@@ -132,15 +145,19 @@ if (childId < 0) {
 		}
 
 		// make decision about whether to request a resource
-		if ((rand() % MAX_LUCKY_NUMBER) == luckyNumber) {
-			if (rand() % BINARY_CHOICE) {
+		if ((get_random(MAX_LUCKY_NUMBER)) == luckyNumber) {
+			if (get_random(BINARY_CHOICE)) {
 				// request a resource
+				int resource = get_random(MAX_RESOURCE_COUNT);
 				sem_wait(sem);
 				p_shmMsg->userPid = getpid();
 				p_shmMsg->userRequestOrRelease = 1;
-				p_shmMsg->userResource = rand() % MAX_RESOURCE_COUNT;
+				p_shmMsg->userResource = resource;
 				sem_post(sem);
 				requestedAResource = 1;
+
+				getTime(timeVal);
+				if (DEBUG) printf("user %s: process %d has requested resource %d\n", timeVal, (int) getpid(), resource);
 			} else {
 				// release a resource
 				int releasedResource = 0;
@@ -160,6 +177,9 @@ if (childId < 0) {
 					p_shmMsg->userRequestOrRelease = 2;
 					p_shmMsg->userResource = releasedResource;
 					sem_post(sem);
+
+					getTime(timeVal);
+					if (DEBUG) printf("user %s: process %d has released resource %d\n", timeVal, (int) getpid(), releasedResource);
 				}
 			}
 		}
@@ -217,7 +237,7 @@ if (childId < 0) {
 	} // end main while loop
 
 	getTime(timeVal);
-	printf("user %s: Process %d escaped main while loop\n", timeVal, (int) getpid());
+	printf("user %s: Process %d escaped main while loop at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 
 	sem_wait(sem);
 
@@ -263,21 +283,27 @@ void do_work(int willRunForThisLong) {
 
 }
 
-void increment_user_clock_values(int ossSeconds, int ossUSeconds, int seconds, int uSeconds, int offset) {
+void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset) {
 	const int oneBillion = 1000000000;
 
-	int localOssSeconds = ossSeconds;
-	int localOssUSeconds = ossUSeconds;
+	userWaitSeconds = ossSeconds;
+	userWaitUSeconds = ossUSeconds;
 
-	localOssUSeconds += offset;
+	userWaitUSeconds += offset;
 
-	if (localOssUSeconds >= oneBillion) {
-		localOssSeconds++;
-		localOssUSeconds -= oneBillion;
+	if (userWaitUSeconds >= oneBillion) {
+		userWaitSeconds++;
+		userWaitUSeconds -= oneBillion;
 	}
 
-	seconds = localOssSeconds;
-	uSeconds = localOssUSeconds;
+	if (VERBOSE && DEBUG) printf("user: updating user wait time values by %d ms to %d.%09d\n", offset, userWaitSeconds, userWaitUSeconds);
+}
 
-	if (DEBUG) printf("user: updating user wait time values by %d ms to %d.%09d\n", offset, ossSeconds, ossUSeconds);
+int get_random(int modulus) {
+//	struct timespec sleeptime;
+//	sleeptime.tv_sec = 0;
+//	sleeptime.tv_nsec = 15 * 1000 * 1000;
+//	nanosleep(&sleeptime, NULL);
+
+	return rand() % modulus;
 }
