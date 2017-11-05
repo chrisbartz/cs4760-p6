@@ -18,7 +18,7 @@
 #include "queue.h"
 
 #define DEBUG 1							// setting to 1 greatly increases number of logging events
-#define VERBOSE 1						// setting to 1 makes it even worse than DEBUG
+#define VERBOSE 0						// setting to 1 makes it even worse than DEBUG
 #define TUNING 1						// tuning related messages
 //#define PRIQUEUEHI 5000					// this is the time limit of the hi priority queue
 //#define PRIQUEUEMED 500000				// this is the time limit of the med priority queue
@@ -36,6 +36,8 @@ int quantum = 100000; // base for how many nanoseconds to increment each loop; d
 char timeVal[30]; // store formatted time string for display in logging
 long timeStarted = 0; // when the OSS clock started
 long timeToStop = 0; // when the OSS should exit in real time
+int lastSignalPid = 0;
+int signalRetries = 0;
 
 long long totalTurnaroundTime; // these are for the after action report
 long long totalWaitTime;
@@ -276,8 +278,8 @@ int main(int argc, char *argv[]) {
 			int userPid = p_shmMsg->userPid;
 
 			getTime(timeVal);
-			if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d) at my time %d.%09d\n",
-					timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+			if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d, userGrantedResource:%d) at my time %d.%09d\n",
+					timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
 
 			int pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
 
@@ -320,7 +322,7 @@ int main(int argc, char *argv[]) {
 				p_shmMsg->userResource = 0;
 
 			} else if (p_shmMsg->userRequestOrRelease != 0) {
-				if (p_shmMsg->userRequestOrRelease = 1) { // this is a request for a resource
+				if (p_shmMsg->userRequestOrRelease == 1) { // this is a request for a resource
 					if (DEBUG) printf("OSS  %s: Child %d is requesting a resource at my time %d.%09d\n",
 											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
@@ -338,7 +340,7 @@ int main(int argc, char *argv[]) {
 					p_shmMsg->userResource = 0;
 
 
-				} else { // this is a release of a resource
+				} else if (p_shmMsg->userRequestOrRelease == 2) { // this is a release of a resource
 					if (DEBUG) printf("OSS  %s: Child %d is releasing a resource at my time %d.%09d\n",
 											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
@@ -350,6 +352,23 @@ int main(int argc, char *argv[]) {
 					p_shmMsg->userHaltTime = 0;
 					p_shmMsg->userRequestOrRelease = 0;
 					p_shmMsg->userResource = 0;
+				}
+			} else if (p_shmMsg->userGrantedResource == 0) {
+				// incomplete message
+				lastSignalPid = p_shmMsg->userPid;
+				signalRetries++;
+				if (signalRetries > 4) {
+					signalRetries = 0;
+					p_shmMsg->userPid = 0;
+					p_shmMsg->userHaltSignal = 0;
+					p_shmMsg->userHaltTime = 0;
+					p_shmMsg->userRequestOrRelease = 0;
+					p_shmMsg->userResource = 0;
+					p_shmMsg->userGrantedResource = 0;
+
+					getTime(timeVal);
+					if (DEBUG) printf("OSS  %s: message from child %d (no status from child) has been reset at my time %d.%09d\n",
+							timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 				}
 			}
 
@@ -558,7 +577,7 @@ void pcbDelete(int pcbMap[], int index) {
 int pcbFindIndex(int pid) {
 	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
 		if (p_shmMsg->pcb[i].pid == pid) {
-			if (DEBUG) printf("OSS  %s: found pcbIndex: %d\n", timeVal, i);
+			if (DEBUG && VERBOSE) printf("OSS  %s: found pcbIndex: %d\n", timeVal, i);
 			return i;
 		}
 	}
