@@ -38,6 +38,10 @@ long timeStarted = 0; // when the OSS clock started
 long timeToStop = 0; // when the OSS should exit in real time
 int lastSignalPid = 0;
 int signalRetries = 0;
+int resourceRequests = 0;
+int resourcesGranted = 0;
+int resourcesQueued = 0;
+int resourceReleases = 0;
 
 long long totalTurnaroundTime; // these are for the after action report
 long long totalWaitTime;
@@ -72,13 +76,16 @@ void pcbAssignQueue(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS],
 void pcbUpdateTotalStats(int pcbIndex); // update total stats for after action report
 void pcbDisplayTotalStats(); // display after action report
 
+int findAvailableResource(int resource); // find if resource is available
+void enqueueResourceRequest(int pid, int resource); // add request to queue
+
 int main(int argc, char *argv[]) {
 	int childProcessCount = 0; // number of child processes spawned
 	int dispatchedProcessCount = 0; // number of dispatched child processes
-	int maxDispatchedProcessCount = 1; // limit to number of dispatched child processes
+//	int maxDispatchedProcessCount = 1; // limit to number of dispatched child processes
 	int opt; // to support argument switches below
 	pid_t childpid; // store child pid
-	int maxConcSlaveProcesses = 2; // max concurrent child processes
+	int maxConcSlaveProcesses = 5; // max concurrent child processes
 	int maxOssTimeLimitSeconds = 10000; // max run time in oss seconds
 	char logFileName[50]; // name of log file
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
@@ -171,6 +178,15 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++)
 		pcbDelete(pcbMap, i);
 
+	for (int i = 0; i < MAX_RESOURCE_REQUEST_COUNT; i++) {
+		p_shmMsg->resourceRequestQueue[i][0] = 0;
+		p_shmMsg->resourceRequestQueue[i][1] = 0;
+	}
+
+	for (int i = 0; i < MAX_RESOURCE_COUNT; i++) {
+		p_shmMsg->resourcesGrantedCount[i] = 0;
+	}
+
 	// open semaphore
 	sem = open_semaphore(1);
 
@@ -178,22 +194,21 @@ int main(int argc, char *argv[]) {
 	signal(SIGINT, signal_handler);
 
 	getTime(timeVal);
-	if (DEBUG && VERBOSE)
-		printf("OSS  %s: entering main loop\n", timeVal);
+	if (DEBUG && VERBOSE) printf("OSS  %s: entering main loop\n", timeVal);
+
+	struct timespec timeperiod;
+	timeperiod.tv_sec = 0;
+	timeperiod.tv_nsec = 5 * 10000;
 
 	// this is the main loop
 	while (1) {
 
 		// reduce the cpu load from looping
-		struct timespec timeperiod;
-		timeperiod.tv_sec = 0;
-		timeperiod.tv_nsec = 5 * 10000;
 		nanosleep(&timeperiod, NULL);
 
 		//what to do when signal encountered
 		if (signalIntercepted) { // signalIntercepted is set by signal handler
-			printf(
-					"\nmaster: //////////// oss terminating children due to a signal! //////////// \n\n");
+			printf("\nmaster: //////////// oss terminating children due to a signal! //////////// \n\n");
 			printf("master: parent terminated due to a signal!\n\n");
 
 			kill_detach_destroy_exit(130);
@@ -278,8 +293,10 @@ int main(int argc, char *argv[]) {
 			int userPid = p_shmMsg->userPid;
 
 			getTime(timeVal);
-			if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d, userGrantedResource:%d) at my time %d.%09d\n",
-					timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
+			if (DEBUG && VERBOSE)
+				if (p_shmMsg->userGrantedResource == 0)
+					printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d, userGrantedResource:%d) at my time %d.%09d\n",
+							timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
 
 			int pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
 
@@ -305,7 +322,7 @@ int main(int argc, char *argv[]) {
 
 			getTime(timeVal); // the user process is sending a message
 			if (p_shmMsg->userHaltSignal == 1) { // process is terminating
-				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
+				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
 				// book keeping
 				pcbUpdateStats(pcbIndex);
@@ -313,6 +330,8 @@ int main(int argc, char *argv[]) {
 				pcbDelete(pcbMap, pcbIndex);
 				dispatchedProcessCount--; // because a child process is no longer dispatched
 				childProcessCount--; // because a child process completed
+
+				// release all resources
 
 				// clear the child signals
 				p_shmMsg->userPid = 0;
@@ -323,15 +342,31 @@ int main(int argc, char *argv[]) {
 
 			} else if (p_shmMsg->userRequestOrRelease != 0) {
 				if (p_shmMsg->userRequestOrRelease == 1) { // this is a request for a resource
-					if (DEBUG) printf("OSS  %s: Child %d is requesting a resource at my time %d.%09d\n",
-											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
+					if (DEBUG) printf("OSS  %s: Child %d is requesting a resource %d at my time %d.%09d\n",
+											timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
 
-					p_shmMsg->userGrantedResource = p_shmMsg->userResource * 100;
-					p_shmMsg->userPid = userPid;
+					resourceRequests++;
 
-					getTime(timeVal);
-					if (DEBUG) printf("OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
+					int resourceValue = findAvailableResource(p_shmMsg->userResource);
+
+					// check whether resource is available
+					if (resourceValue) {
+						p_shmMsg->userGrantedResource = resourceValue;
+						p_shmMsg->userPid = userPid;
+						resourcesGranted++; // if resource available
+
+						getTime(timeVal);
+						if (DEBUG) printf("OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
 								timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
+
+					} else { // if resource not available queue it
+						enqueueResourceRequest(p_shmMsg->userPid, p_shmMsg->userResource);
+						resourcesQueued++;
+						p_shmMsg->userGrantedResource = 0;
+						p_shmMsg->userPid = 0;
+						if (DEBUG) printf("OSS  %s: Child %d resource resource %d has been queued at my time %d.%09d\n",
+								timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+					}
 
 					// clear the child signals
 					p_shmMsg->userHaltSignal = 0;
@@ -344,7 +379,7 @@ int main(int argc, char *argv[]) {
 					if (DEBUG) printf("OSS  %s: Child %d is releasing a resource at my time %d.%09d\n",
 											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
-
+					resourceReleases++;
 
 					// clear the child signals
 					p_shmMsg->userPid = 0;
@@ -607,14 +642,14 @@ void pcbUpdateStats(int pcbIndex) {
 	p_shmMsg->pcb[pcbIndex].totalTimeInSystem = 0;
 
 	getTime(timeVal);
-	printf("OSS  %s: Total time this dispatch was %d nanoseconds\n", timeVal,
-			p_shmMsg->pcb[pcbIndex].lastBurstLength);
-	fprintf(logFile, "OSS  %s: Total time this dispatch was %d nanoseconds\n",
-			timeVal, p_shmMsg->pcb[pcbIndex].lastBurstLength);
-	fprintf(logFile,
-			"OSS  %s: Receiving that process with PID %d ran for %d nanoseconds\n",
-			timeVal, p_shmMsg->pcb[pcbIndex].pid,
-			p_shmMsg->pcb[pcbIndex].lastBurstLength);
+//	printf("OSS  %s: Total time this dispatch was %d nanoseconds\n", timeVal,
+//			p_shmMsg->pcb[pcbIndex].lastBurstLength);
+//	fprintf(logFile, "OSS  %s: Total time this dispatch was %d nanoseconds\n",
+//			timeVal, p_shmMsg->pcb[pcbIndex].lastBurstLength);
+//	fprintf(logFile,
+//			"OSS  %s: Receiving that process with PID %d ran for %d nanoseconds\n",
+//			timeVal, p_shmMsg->pcb[pcbIndex].pid,
+//			p_shmMsg->pcb[pcbIndex].lastBurstLength);
 }
 
 // void pcbAssignQueue(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS], int priQueueQuantums[], int pcbIndex) {
@@ -648,13 +683,34 @@ void pcbUpdateTotalStats(int pcbIndex) {
 }
 
 void pcbDisplayTotalStats() {
-	if (DEBUG) printf("Total Turnaround Time(usec): %lli\nTotal Wait Time(usec): %lli\n Total PRocesses: %d\nCPU Idle Time(usec): %lli\n\n",
+	if (DEBUG) printf("Total Turnaround Time(usec): %lli\nTotal Wait Time(usec): %lli\nTotal Processes: %d\nCPU Idle Time(usec): %lli\n",
 				totalTurnaroundTime,
 				totalWaitTime, totalProcesses, totalCpuIdleTime);
-	printf("Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
+	printf("Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
+	printf("Resources Requested: %d\nResources Granted: %d\nResource Requests Queued: %d\nResources Released: %d\n\n",
+				resourceRequests, resourcesGranted, resourcesQueued, resourceReleases);
 	fprintf(logFile,"Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
 }
+
+int findAvailableResource(int resource) {
+	int value = p_shmMsg->resourcesGrantedCount[(resource - 1)];
+	if (p_shmMsg->resourcesGrantedCount[(resource - 1)] < MAX_RESOURCE_QTY) {
+		p_shmMsg->resourcesGrantedCount[(resource - 1)]++;
+		return (resource * 100) + value;
+	}
+	return 0;
+}
+
+void enqueueResourceRequest(int pid, int resource) {
+	for (int i = 0; i < MAX_RESOURCE_REQUEST_COUNT; i++) {
+		if (p_shmMsg->resourceRequestQueue[i][0] == 0) {
+			p_shmMsg->resourceRequestQueue[i][0] = pid;
+			p_shmMsg->resourceRequestQueue[i][1] = resource;
+		}
+	}
+}
+

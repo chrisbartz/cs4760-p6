@@ -14,12 +14,13 @@
 #include "queue.h"
 
 #define DEBUG 1 			// setting to 1 greatly increases number of logging events
-#define VERBOSE 1 			// setting to 1 greatly increases number of logging events
+#define VERBOSE 0 			// setting to 1 greatly increases number of logging events
 #define TUNING 0
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
 #define BINARY_CHOICE 2
 #define MAX_RESOURCE_WAIT 100 * 1000 * 1000
-#define MAX_LUCKY_NUMBER 50
+#define MAX_LUCKY_NUMBER 25
+
 
 SmStruct shmMsg;
 SmStruct *p_shmMsg;
@@ -38,8 +39,6 @@ int userWaitSeconds;		// the next time the user process makes a resource decisio
 int userWaitUSeconds;		// the next time the user process makes a resource decision
 int luckyNumber; // a random number to determine if the process terminates
 int requestedAResource = 0;
-int retryCount = 0;
-int failedResourceRequests = 0;
 
 char timeVal[30]; // formatted time values for logging
 
@@ -47,6 +46,7 @@ void do_work(int willRunForThisLong);
 void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset);
 int get_random(int modulus);
 void init_resources();
+int count_resources();
 int insert_resource(int resource);
 void release_resource(int resource);
 
@@ -55,7 +55,7 @@ childId = atoi(argv[0]); // saves the child id passed from the parent process
 pcbIndex = atoi(argv[1]); // saves the pcb index passed from the parent process
 
 getTime(timeVal);
-if (DEBUG) printf("user %s: PCBINDEX: %d\n", timeVal, pcbIndex);
+if (DEBUG && VERBOSE) printf("user %s: PCBINDEX: %d\n", timeVal, pcbIndex);
 
 srand(getpid());
 luckyNumber = get_random(MAX_LUCKY_NUMBER);
@@ -108,14 +108,8 @@ if (childId < 0) {
 	if (DEBUG) printf("user %s: process %d set resource wait to: %d.%09d\n", timeVal, (int) getpid(), userWaitSeconds, userWaitUSeconds);
 
 	while (1) { // main while loop
-		nanosleep(&timeperiod, NULL); // reduce the cpu load from looping
 
-		// short circuit if OSS fails to respond to requests
-		if (failedResourceRequests > 10) {
-			getTime(timeVal);
-			printf("user %s: OSS NOT RESPONDING to process %d resource requests. EXITING! at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
-			break;
-		}
+		nanosleep(&timeperiod, NULL); // reduce the cpu load from looping
 
 		// make decision about whether to terminate successfully
 		if (!(p_shmMsg->ossSeconds >= userWaitSeconds && p_shmMsg->ossUSeconds > userWaitUSeconds)) {
@@ -138,31 +132,13 @@ if (childId < 0) {
 
 		// check for requested resource
 		if (requestedAResource) {
-			retryCount++;
-
-			// limit resource retries
-			if (retryCount > 10) {
-				failedResourceRequests++;
-				requestedAResource = 0;
-				retryCount = 0;
-
-				if (p_shmMsg->userPid == (int) getpid()) {
-					sem_wait(sem);
-					p_shmMsg->userPid = 0;
-					p_shmMsg->userRequestOrRelease = 0;
-					p_shmMsg->userResource = 0;
-					p_shmMsg->userGrantedResource = 0;
-					sem_post(sem);
-				}
-
-			}
 
 			getTime(timeVal);
 			if (DEBUG && VERBOSE) printf("user %s: process %d checking on resource %d reply from OSS\n", timeVal, (int) getpid(), p_shmMsg->userResource);
 
 			if (p_shmMsg->userPid != (int) getpid() || p_shmMsg->userGrantedResource == 0) {
 				// resource has not been granted (yet)
-				continue;
+//				continue;
 			} else {
 				// then resource has been granted
 				getTime(timeVal);
@@ -171,7 +147,7 @@ if (childId < 0) {
 				// keep track of assigned resources
 				if (!insert_resource(p_shmMsg->userGrantedResource)) {
 					getTime(timeVal);
-					printf("user %s: process %d cannot accept resource %d\n", timeVal, (int) getpid(), p_shmMsg->userGrantedResource);
+					printf("user %s: process %d cannot accept resource %d (resource queue full)\n", timeVal, (int) getpid(), p_shmMsg->userGrantedResource);
 				}
 
 				// clear message
@@ -188,17 +164,21 @@ if (childId < 0) {
 		// make decision about whether to request a resource
 		if ((get_random(MAX_LUCKY_NUMBER)) == luckyNumber) {
 
-			if (get_random(BINARY_CHOICE)) { // request a resource
-				int resource = get_random(MAX_RESOURCE_COUNT) + 1;
-				sem_wait(sem);
-				p_shmMsg->userRequestOrRelease = 1;
-				p_shmMsg->userResource = resource;
-				p_shmMsg->userPid = getpid();
-				sem_post(sem);
-				requestedAResource = 1;
+				if (get_random(BINARY_CHOICE)) { // request a resource
+					int resource = get_random(MAX_RESOURCE_COUNT) + 1;
+					sem_wait(sem);
+					if (p_shmMsg->userPid != 0)
+						sem_post(sem);
+					else {
+						p_shmMsg->userRequestOrRelease = 1;
+						p_shmMsg->userResource = resource;
+						p_shmMsg->userPid = getpid();
+						sem_post(sem);
+						requestedAResource = 1;
+						getTime(timeVal);
+						if (DEBUG) printf("user %s: process %d has requested resource %d at %d.%09d\n", timeVal, (int) getpid(), resource, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
+					}
 
-				getTime(timeVal);
-				if (DEBUG) printf("user %s: process %d has requested resource %d at %d.%09d\n", timeVal, (int) getpid(), resource, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 			}
 
 			else { // release a resource
@@ -217,13 +197,18 @@ if (childId < 0) {
 				// send order to release resource
 				if (releasedResource) {
 					sem_wait(sem);
-					p_shmMsg->userRequestOrRelease = 2;
-					p_shmMsg->userResource = releasedResource;
-					p_shmMsg->userPid = getpid();
-					sem_post(sem);
+					if (p_shmMsg->userPid != 0)
+						sem_post(sem);
+					else {
+						p_shmMsg->userRequestOrRelease = 2;
+						p_shmMsg->userResource = releasedResource;
+						p_shmMsg->userPid = getpid();
+						sem_post(sem);
 
-					getTime(timeVal);
-					if (DEBUG) printf("user %s: process %d has released resource %d\n", timeVal, (int) getpid(), releasedResource);
+						getTime(timeVal);
+						printf("user %s: process %d has released resource %d\n", timeVal, (int) getpid(), releasedResource);
+						}
+
 				}
 			}
 		}
@@ -305,7 +290,7 @@ int get_random(int modulus) {
 int insert_resource(int resource) {
 	int status = 0;
 	if (VERBOSE && DEBUG) printf("user: process %d resource block (request): ", (int) getpid());
-	for (int i = 0; i < MAX_RESOURCE_COUNT; i++) {
+	for (int i = 0; i < MAX_RESOURCES; i++) {
 		if (status == 0 && p_shmMsg->pcb[pcbIndex].resources[i] == 0) {
 			p_shmMsg->pcb[pcbIndex].resources[i] = resource;
 			status = 1;
@@ -321,18 +306,29 @@ int insert_resource(int resource) {
 void release_resource(int resource) {
 	int status = 0;
 	if (VERBOSE && DEBUG) printf("user: process %d resource block (release): ", (int) getpid());
-	for (int i = 0; i < MAX_RESOURCE_COUNT; i++) {
+	for (int i = 0; i < MAX_RESOURCES; i++) {
 		if (VERBOSE && DEBUG) printf("%d,", p_shmMsg->pcb[pcbIndex].resources[i]);
 		if (status == 0 && p_shmMsg->pcb[pcbIndex].resources[i] == resource) {
 			p_shmMsg->pcb[pcbIndex].resources[i] = 0;
 			status = 1;
+			int resourceIndex = (int) (resource/100) - 1;
+			p_shmMsg->resourcesGrantedCount[resourceIndex]--;
 		}
 	}
 	if (VERBOSE && DEBUG) printf("\n");
 }
 
 void init_resources() {
-	for (int i = 0; i < MAX_RESOURCE_COUNT; i++) {
+	for (int i = 0; i < MAX_RESOURCES; i++) {
 		p_shmMsg->pcb[pcbIndex].resources[i] = 0;
 	}
+}
+
+int count_resources() {
+	int count = 0;
+	for (int i = 0; i < MAX_RESOURCES; i++) {
+		if (p_shmMsg->pcb[pcbIndex].resources[i] != 0)
+			count++;
+	}
+	return count;
 }

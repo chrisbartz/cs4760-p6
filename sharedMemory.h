@@ -13,7 +13,10 @@
 #define MAX_PROCESS_CONTROL_BLOCKS 18
 #define MAX_RESOURCE_DESCRIPTORS 20
 #define MAX_RESOURCE_COUNT 10
+#define MAX_RESOURCE_QTY 10
+#define MAX_RESOURCE_REQUEST_COUNT 1000
 #define RESOURCE_DESCRIPTOR_MOD 5
+#define MAX_RESOURCES 20
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -63,6 +66,8 @@ typedef struct {
 	int userGrantedResource;
 	SmProcessControlBlock pcb[MAX_PROCESS_CONTROL_BLOCKS];
 	SmResourceDescriptor resDesc[MAX_RESOURCE_DESCRIPTORS];
+	int resourcesGrantedCount[MAX_RESOURCE_COUNT];
+	int resourceRequestQueue[MAX_RESOURCE_REQUEST_COUNT][2]; // 0: pid 1: resource request
 } SmStruct;
 
 sem_t* open_semaphore(int createSemaphore);
