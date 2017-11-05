@@ -273,8 +273,12 @@ int main(int argc, char *argv[]) {
 			if (p_shmMsg->userPid == 0)
 				continue; // jump back to the beginning of the loop if still waiting for message
 
+			getTime(timeVal);
+			if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d) at my time %d.%09d\n",
+					timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+
 			int pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
-//			getTime(timeVal);
+
 
 //			if (p_shmMsg->userHaltSignal) { 	// the user process is halting after the end of its time
 //				if (DEBUG) printf("OSS  %s: Child %d is halting at my time %d.%09d\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
@@ -296,9 +300,8 @@ int main(int argc, char *argv[]) {
 //			} else {
 
 			getTime(timeVal); // the user process is sending a message
-			if (p_shmMsg->userHaltSignal = 1) { // process is terminating
-				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n",
-										timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
+			if (p_shmMsg->userHaltSignal == 1) { // process is terminating
+				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
 				// book keeping
 				pcbUpdateStats(pcbIndex);
@@ -319,14 +322,18 @@ int main(int argc, char *argv[]) {
 					if (DEBUG) printf("OSS  %s: Child %d is requesting a resource at my time %d.%09d\n",
 											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
+					p_shmMsg->userGrantedResource = p_shmMsg->userResource * 100;
 
+					getTime(timeVal);
+					if (DEBUG) printf("OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
+								timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
 
 					// clear the child signals
-//					p_shmMsg->userPid = 0;
 					p_shmMsg->userHaltSignal = 0;
 					p_shmMsg->userHaltTime = 0;
 					p_shmMsg->userRequestOrRelease = 0;
-					p_shmMsg->userResource = 100;
+					p_shmMsg->userResource = 0;
+
 
 				} else { // this is a release of a resource
 					if (DEBUG) printf("OSS  %s: Child %d is releasing a resource at my time %d.%09d\n",

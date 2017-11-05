@@ -14,12 +14,12 @@
 #include "queue.h"
 
 #define DEBUG 1 			// setting to 1 greatly increases number of logging events
-#define VERBOSE 0 			// setting to 1 greatly increases number of logging events
+#define VERBOSE 1 			// setting to 1 greatly increases number of logging events
 #define TUNING 0
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
 #define BINARY_CHOICE 2
 #define MAX_RESOURCE_WAIT 100 * 1000 * 1000
-#define MAX_LUCKY_NUMBER 100
+#define MAX_LUCKY_NUMBER 50
 
 SmStruct shmMsg;
 SmStruct *p_shmMsg;
@@ -110,11 +110,11 @@ if (childId < 0) {
 				int guess = (get_random(MAX_LUCKY_NUMBER));
 				if (guess == luckyNumber) {
 					getTime(timeVal);
-					if (DEBUG) printf("user %s: user %d determined that guess = %d and luckyNumber = %d and it is time to terminate at %d.%09d\n",
+					if (DEBUG) printf("user %s: process %d determined that guess = %d and luckyNumber = %d and it is time to terminate at %d.%09d\n",
 							timeVal, (int) getpid(), guess, luckyNumber, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 					break;
 				} else {
-					if (VERBOSE && DEBUG) printf("user %s: user %d determined that guess = %d and luckyNumber = %d and it is NOT time to terminate at %d.%09d\n",
+					if (VERBOSE && DEBUG) printf("user %s: process %d determined that guess = %d and luckyNumber = %d and it is NOT time to terminate at %d.%09d\n",
 								timeVal, (int) getpid(), guess, luckyNumber, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 					increment_user_wait_values(p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds,  get_random(MAX_RESOURCE_WAIT));
 				}
@@ -123,6 +123,9 @@ if (childId < 0) {
 
 		// check for requested resource
 		if (requestedAResource) {
+			getTime(timeVal);
+			if (DEBUG && VERBOSE) printf("user %s: process %d checking on resource %d reply from OSS\n", timeVal, (int) getpid(), p_shmMsg->userResource);
+
 			if (p_shmMsg->userPid != (int) getpid() || p_shmMsg->userGrantedResource == 0) {
 				// resource has not been granted (yet)
 				continue;
@@ -146,8 +149,8 @@ if (childId < 0) {
 
 		// make decision about whether to request a resource
 		if ((get_random(MAX_LUCKY_NUMBER)) == luckyNumber) {
-			if (get_random(BINARY_CHOICE)) {
-				// request a resource
+
+			if (get_random(BINARY_CHOICE)) { // request a resource
 				int resource = get_random(MAX_RESOURCE_COUNT);
 				sem_wait(sem);
 				p_shmMsg->userPid = getpid();
@@ -157,16 +160,17 @@ if (childId < 0) {
 				requestedAResource = 1;
 
 				getTime(timeVal);
-				if (DEBUG) printf("user %s: process %d has requested resource %d\n", timeVal, (int) getpid(), resource);
-			} else {
-				// release a resource
+				if (DEBUG) printf("user %s: process %d has requested resource %d at %d.%09d\n", timeVal, (int) getpid(), resource, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
+			}
+
+			else { // release a resource
 				int releasedResource = 0;
 
 				// first find a resource to release
-				for (int i = 0; i < 100; i++) {
+				for (int i = 0; i < 100 && releasedResource == 0; i++) {
 					if (p_shmMsg->pcb[pcbIndex].resources[i] != 0) {
 						releasedResource = p_shmMsg->pcb[pcbIndex].resources[i];
-						break;
+//						break;
 					}
 				}
 
@@ -184,56 +188,6 @@ if (childId < 0) {
 			}
 		}
 
-
-
-//			sem_wait(sem);
-
-//			int runTime = p_shmMsg->dispatchedTime; // this is our maximum running time
-
-			// clear the message from oss
-//			p_shmMsg->dispatchedPid = 0;
-//			p_shmMsg->dispatchedTime = 0;
-
-//			sem_post(sem);
-
-//			getTime(timeVal);
-//			printf("user %s: Receiving that process %d can run for %d nanoseconds\n", timeVal, (int) getpid(), runTime);
-//
-//
-//
-//
-//			int willTerminateSuccessfully = (rand() % BINARY_CHOICE); // make decision whether we will terminate the process
-//			int willRunForThisLong;
-//
-//			if (willRunForFullTime) {
-//				willRunForThisLong = runTime; // we will run for the full quantum assigned
-//			} else {
-//				willRunForThisLong = (rand() % runTime); // determine how long we will run if partial
-//			}
-//
-//			do_work(willRunForThisLong); // doing "work"
-//
-//			sem_wait(sem);
-//
-//			// report back to oss
-//			p_shmMsg->userPid = (int) getpid();
-//			if (p_shmMsg->pcb[pcbIndex].totalCpuTime + willRunForThisLong > processTimeRequired) {
-//				p_shmMsg->userHaltSignal = 0; // terminating - send last message
-//
-//
-//			}
-//			else
-//				p_shmMsg->userHaltSignal = 1; // halting
-//			p_shmMsg->userHaltTime = willRunForThisLong;
-//
-//			sem_post(sem);
-//
-//			getTime(timeVal);
-//			if (DEBUG) printf("user %s: Process %d checking escape conditions\nTotalCPUTime: %d willRunForThisLong: %d processTimeRequired: %d\n", timeVal, (int) getpid(), p_shmMsg->pcb[pcbIndex].totalCpuTime, willRunForThisLong ,processTimeRequired);
-//
-//			if (p_shmMsg->pcb[pcbIndex].totalCpuTime + willRunForThisLong > processTimeRequired)
-//				break;
-
 	} // end main while loop
 
 	getTime(timeVal);
@@ -243,7 +197,7 @@ if (childId < 0) {
 
 	// report process termination to oss
 	p_shmMsg->userPid = (int) getpid();
-	p_shmMsg->userHaltSignal = 0;
+	p_shmMsg->userHaltSignal = 1;
 
 	// send total bookkeeping stats
 	p_shmMsg->pcb[pcbIndex].startUserSeconds = startSeconds;
