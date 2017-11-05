@@ -273,6 +273,8 @@ int main(int argc, char *argv[]) {
 			if (p_shmMsg->userPid == 0)
 				continue; // jump back to the beginning of the loop if still waiting for message
 
+			int userPid = p_shmMsg->userPid;
+
 			getTime(timeVal);
 			if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d) at my time %d.%09d\n",
 					timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, ossSeconds, ossUSeconds);
@@ -323,6 +325,7 @@ int main(int argc, char *argv[]) {
 											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
 					p_shmMsg->userGrantedResource = p_shmMsg->userResource * 100;
+					p_shmMsg->userPid = userPid;
 
 					getTime(timeVal);
 					if (DEBUG) printf("OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
@@ -626,6 +629,9 @@ void pcbUpdateTotalStats(int pcbIndex) {
 }
 
 void pcbDisplayTotalStats() {
+	if (DEBUG) printf("Total Turnaround Time(usec): %lli\nTotal Wait Time(usec): %lli\n Total PRocesses: %d\nCPU Idle Time(usec): %lli\n\n",
+				totalTurnaroundTime,
+				totalWaitTime, totalProcesses, totalCpuIdleTime);
 	printf("Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);

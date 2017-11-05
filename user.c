@@ -38,6 +38,8 @@ int userWaitSeconds;		// the next time the user process makes a resource decisio
 int userWaitUSeconds;		// the next time the user process makes a resource decision
 int luckyNumber; // a random number to determine if the process terminates
 int requestedAResource = 0;
+int retryCount = 0;
+int failedResourceRequests = 0;
 
 char timeVal[30]; // formatted time values for logging
 
@@ -64,11 +66,11 @@ if (childId < 0) {
 	if (DEBUG) printf("user %s: Something wrong with child id: %d\n", timeVal, getpid());
 	exit(1);
 } else {
-	if (DEBUG) printf("user %s: child %d (#%d) started normally after execl\n", timeVal, (int) getpid(), childId);
+	if (DEBUG) printf("user %s: process %d (#%d) started normally after execl\n", timeVal, (int) getpid(), childId);
 
 	// instantiate shared memory from oss
 	getTime(timeVal);
-	if (DEBUG) printf("user %s: child %d (#%d) create shared memory\n", timeVal, (int) getpid(), childId);
+	if (DEBUG) printf("user %s: process %d (#%d) create shared memory\n", timeVal, (int) getpid(), childId);
 
 	// refactored shared memory using struct
 	int shmid;
@@ -85,7 +87,7 @@ if (childId < 0) {
 
 	getTime(timeVal);
 	if (TUNING || DEBUG)
-		printf("user %s: child %d (#%d) read start time in shared memory: %d.%09d\n",
+		printf("user %s: process %d (#%d) read start time in shared memory: %d.%09d\n",
 			timeVal, (int) getpid(), childId, startSeconds, startUSeconds);
 
 
@@ -98,9 +100,16 @@ if (childId < 0) {
 
 	increment_user_wait_values(p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds,  get_random(MAX_RESOURCE_WAIT));
 	getTime(timeVal);
-	if (DEBUG) printf("user %s: child %d set resource wait to: %d.%09d\n", timeVal, (int) getpid(), userWaitSeconds, userWaitUSeconds);
+	if (DEBUG) printf("user %s: process %d set resource wait to: %d.%09d\n", timeVal, (int) getpid(), userWaitSeconds, userWaitUSeconds);
 
 	while (1) { // main while loop
+
+		// short circuit if OSS fails to respond to requests
+		if (failedResourceRequests > 10) {
+			getTime(timeVal);
+			printf("user %s: OSS NOT RESPONDING to process %d resource requests. EXITING! at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
+			break;
+		}
 
 		// make decision about whether to terminate successfully
 		if (!(p_shmMsg->ossSeconds >= userWaitSeconds && p_shmMsg->ossUSeconds > userWaitUSeconds)) {
@@ -123,6 +132,25 @@ if (childId < 0) {
 
 		// check for requested resource
 		if (requestedAResource) {
+			retryCount++;
+
+			// limit resource retries
+			if (retryCount > 100) {
+				failedResourceRequests++;
+				requestedAResource = 0;
+				retryCount = 0;
+
+				if (p_shmMsg->userPid == (int) getpid()) {
+					sem_wait(sem);
+					p_shmMsg->userPid = 0;
+					p_shmMsg->userRequestOrRelease = 0;
+					p_shmMsg->userResource = 0;
+					p_shmMsg->userGrantedResource = 0;
+					sem_post(sem);
+				}
+
+			}
+
 			getTime(timeVal);
 			if (DEBUG && VERBOSE) printf("user %s: process %d checking on resource %d reply from OSS\n", timeVal, (int) getpid(), p_shmMsg->userResource);
 
@@ -151,7 +179,7 @@ if (childId < 0) {
 		if ((get_random(MAX_LUCKY_NUMBER)) == luckyNumber) {
 
 			if (get_random(BINARY_CHOICE)) { // request a resource
-				int resource = get_random(MAX_RESOURCE_COUNT);
+				int resource = get_random(MAX_RESOURCE_COUNT) + 1;
 				sem_wait(sem);
 				p_shmMsg->userPid = getpid();
 				p_shmMsg->userRequestOrRelease = 1;
@@ -191,7 +219,7 @@ if (childId < 0) {
 	} // end main while loop
 
 	getTime(timeVal);
-	printf("user %s: Process %d escaped main while loop at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
+	printf("user %s: process %d escaped main while loop at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 
 	sem_wait(sem);
 
@@ -214,7 +242,7 @@ if (childId < 0) {
 	close_semaphore(sem);
 
 	getTime(timeVal);
-	if (DEBUG) printf("user %s: child %d (#%d) exiting normally\n", timeVal, (int) getpid(), childId);
+	if (DEBUG) printf("user %s: process %d (#%d) exiting normally\n", timeVal, (int) getpid(), childId);
 }
 exit(0);
 }
@@ -225,7 +253,7 @@ exit(0);
 void do_work(int willRunForThisLong) {
 
 	getTime(timeVal);
-	printf("user %s: Process %d doing work for %d nanoseconds\n", timeVal, (int) getpid(), willRunForThisLong);
+	printf("user %s: process %d doing work for %d nanoseconds\n", timeVal, (int) getpid(), willRunForThisLong);
 
 	struct timespec sleeptime;
 	sleeptime.tv_sec = 0;
@@ -233,7 +261,7 @@ void do_work(int willRunForThisLong) {
 	nanosleep(&sleeptime, NULL); // we are doing "work" here
 
 	getTime(timeVal);
-	printf("user %s: Process %d done doing work\n", timeVal, (int) getpid());
+	printf("user %s: process %d done doing work\n", timeVal, (int) getpid());
 
 }
 
