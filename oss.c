@@ -64,6 +64,7 @@ void signal_handler(int signalIntercepted); // handle sigint interrupt
 void increment_clock(int offset); // update oss clock in shared memory
 void increment_clock_values(int seconds, int uSeconds, int offset); // increment a local value
 void kill_detach_destroy_exit(int status); // kill off all child processes and shared memory
+void printAllocatedResourceMap();
 
 int pcbMapNextAvailableIndex(); // find next available pcb
 void pcbAssign(int pcbMap[], int index, int pid); // assign process to pcb
@@ -75,6 +76,8 @@ void pcbAssignQueue(int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS],
 		int priQueueQuantums[], int pcbIndex); // intelligently assign a pcb a queue
 void pcbUpdateTotalStats(int pcbIndex); // update total stats for after action report
 void pcbDisplayTotalStats(); // display after action report
+void checkResourceRequestQueue();
+int countAllocatedResourcesFromPcbs(int resource);
 
 int findAvailableResource(int resource); // find if resource is available
 void enqueueResourceRequest(int pid, int resource); // add request to queue
@@ -287,14 +290,18 @@ int main(int argc, char *argv[]) {
 //				dispatchedProcessCount += pcbDispatch(priQueues, priQueueQuantums);
 
 			// wait for child to send message
-			if (p_shmMsg->userPid == 0)
+			if (p_shmMsg->userPid == 0) { // if no message
+				if (ossUSeconds > 0 && ossUSeconds % (quantum * 500) == 0) // limit queue check to every 500 loops
+					checkResourceRequestQueue(); // check to see if any requested resources are available
 				continue; // jump back to the beginning of the loop if still waiting for message
+			}
 
+			// if message sent
 			int userPid = p_shmMsg->userPid;
 
 			getTime(timeVal);
 			if (DEBUG && VERBOSE)
-				if (p_shmMsg->userGrantedResource == 0)
+				if (p_shmMsg->userGrantedResource == 0) // added this check because OSS grants resources with userPid populated
 					printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d, userGrantedResource:%d) at my time %d.%09d\n",
 							timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
 
@@ -343,29 +350,43 @@ int main(int argc, char *argv[]) {
 			} else if (p_shmMsg->userRequestOrRelease != 0) {
 				if (p_shmMsg->userRequestOrRelease == 1) { // this is a request for a resource
 					if (DEBUG) printf("OSS  %s: Child %d is requesting a resource %d at my time %d.%09d\n",
-											timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+
+					fprintf(logFile, "OSS  %s: Child %d is requesting a resource %d at my time %d.%09d\n",
+							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
 
 					resourceRequests++;
 
 					int resourceValue = findAvailableResource(p_shmMsg->userResource);
 
 					// check whether resource is available
-					if (resourceValue) {
+					if (resourceValue && countAllocatedResourcesFromPcbs(p_shmMsg->userResource) < MAX_RESOURCE_QTY) {
 						p_shmMsg->userGrantedResource = resourceValue;
 						p_shmMsg->userPid = userPid;
 						resourcesGranted++; // if resource available
+
+						if (resourcesGranted % 20 == 0)
+							printAllocatedResourceMap();
 
 						getTime(timeVal);
 						if (DEBUG) printf("OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
 								timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
 
+						fprintf(logFile, "OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
+								timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
+
 					} else { // if resource not available queue it
 						enqueueResourceRequest(p_shmMsg->userPid, p_shmMsg->userResource);
 						resourcesQueued++;
+
+						if (DEBUG) printf("OSS  %s: Child %d resource request for %d has been queued at my time %d.%09d\n",
+								timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+
+						fprintf(logFile, "OSS  %s: Child %d resource request for %d has been queued at my time %d.%09d\n",
+								timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+
 						p_shmMsg->userGrantedResource = 0;
 						p_shmMsg->userPid = 0;
-						if (DEBUG) printf("OSS  %s: Child %d resource resource %d has been queued at my time %d.%09d\n",
-								timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
 					}
 
 					// clear the child signals
@@ -376,8 +397,11 @@ int main(int argc, char *argv[]) {
 
 
 				} else if (p_shmMsg->userRequestOrRelease == 2) { // this is a release of a resource
-					if (DEBUG) printf("OSS  %s: Child %d is releasing a resource at my time %d.%09d\n",
-											timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
+					if (DEBUG) printf("OSS  %s: Child %d is releasing a resource %d at my time %d.%09d\n",
+							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
+
+					fprintf(logFile, "OSS  %s: Child %d is releasing a resource %d at my time %d.%09d\n",
+							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
 
 					resourceReleases++;
 
@@ -392,7 +416,7 @@ int main(int argc, char *argv[]) {
 				// incomplete message
 				lastSignalPid = p_shmMsg->userPid;
 				signalRetries++;
-				if (signalRetries > 4) {
+				if (signalRetries > 4) { // if message is not fixed in 5 tries then reset it
 					signalRetries = 0;
 					p_shmMsg->userPid = 0;
 					p_shmMsg->userHaltSignal = 0;
@@ -402,7 +426,7 @@ int main(int argc, char *argv[]) {
 					p_shmMsg->userGrantedResource = 0;
 
 					getTime(timeVal);
-					if (DEBUG) printf("OSS  %s: message from child %d (no status from child) has been reset at my time %d.%09d\n",
+					if (DEBUG) printf("OSS  %s: message from child %d (no status determined) has been reset at my time %d.%09d\n",
 							timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 				}
 			}
@@ -697,20 +721,89 @@ void pcbDisplayTotalStats() {
 }
 
 int findAvailableResource(int resource) {
-	int value = p_shmMsg->resourcesGrantedCount[(resource - 1)];
-	if (p_shmMsg->resourcesGrantedCount[(resource - 1)] < MAX_RESOURCE_QTY) {
-		p_shmMsg->resourcesGrantedCount[(resource - 1)]++;
-		return (resource * 100) + value;
+	int resourceIndex = resource - 1;
+	int value = p_shmMsg->resourcesGrantedCount[resourceIndex];
+//	if (value < 0)
+//		exit(1);
+	if (p_shmMsg->resourcesGrantedCount[resourceIndex] < MAX_RESOURCE_QTY) {
+		p_shmMsg->resourcesGrantedCount[resourceIndex]++;
+		getTime(timeVal);
+		if (DEBUG) printf("OSS  %s: found resource %d: value: %d at %d.%09d\n", timeVal, resource, (resource * 100) + value, ossSeconds, ossUSeconds);
+		int returnValue = (resource * 100) + value;
+		if (returnValue > 0)
+			return returnValue;
 	}
 	return 0;
 }
 
 void enqueueResourceRequest(int pid, int resource) {
 	for (int i = 0; i < MAX_RESOURCE_REQUEST_COUNT; i++) {
-		if (p_shmMsg->resourceRequestQueue[i][0] == 0) {
-			p_shmMsg->resourceRequestQueue[i][0] = pid;
+		if (p_shmMsg->resourceRequestQueue[i][0] == 0) { 						// find end of resource queue
+			p_shmMsg->resourceRequestQueue[i][0] = pid;							// assign process id and resource request
 			p_shmMsg->resourceRequestQueue[i][1] = resource;
 		}
 	}
+}
+
+void checkResourceRequestQueue() {
+	getTime(timeVal);
+	if (DEBUG) printf("OSS  %s: reviewing resource queue for resource availability at my time %d.%09d\n",
+			timeVal, ossSeconds, ossUSeconds);
+
+	fprintf(logFile, "OSS  %s: reviewing resource queue for resource availability at my time %d.%09d\n",
+			timeVal, ossSeconds, ossUSeconds);
+
+	for (int i = 0; i < MAX_RESOURCE_REQUEST_COUNT; i++) { 						// loop through all request queue and find available resources
+		if (p_shmMsg->resourceRequestQueue[i][0] == 0) {						// if we are at the end of the queue then break out
+			printf("queue check made it to %d\n", i);
+			break;
+		}
+
+		int resource = p_shmMsg->resourceRequestQueue[i][1]; 					// grab the next resource request
+		if (p_shmMsg->resourcesGrantedCount[resource - 1] < MAX_RESOURCE_QTY && countAllocatedResourcesFromPcbs(resource) < MAX_RESOURCE_QTY) { // check for availability of the resource and assign to process
+			int index = p_shmMsg->resourcesGrantedCount[resource - 1]++;
+			p_shmMsg->userGrantedResource = (p_shmMsg->resourceRequestQueue[i][1] * 100) + index;
+			p_shmMsg->userPid = p_shmMsg->resourceRequestQueue[i][0];
+
+			getTime(timeVal);
+			if (DEBUG) printf("OSS  %s: a review of the resource queue has granted child %d resource %d at my time %d.%09d\n",
+					timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
+
+			fprintf(logFile, "OSS  %s: a review of the resource queue has granted child %d resource %d at my time %d.%09d\n",
+					timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
+
+			for (int j = i; j < MAX_RESOURCE_REQUEST_COUNT - 1; j++) { // since we granted an available resource, move all remaining values left in the queue
+				p_shmMsg->resourceRequestQueue[j][0] = p_shmMsg->resourceRequestQueue[j + 1][0];
+				p_shmMsg->resourceRequestQueue[j][1] = p_shmMsg->resourceRequestQueue[j + 1][1];
+				 if (p_shmMsg->resourceRequestQueue[j + 1][0] == 0) // if we see zero then we should be at the end of the queue
+					 break;
+			}
+		}
+	}
+}
+
+void printAllocatedResourceMap () {
+	printf("\n\n        RESOUCE ALLOCATION GRAPH\n");
+	printf("  pid  R1 R2 R3 R4 R5 R6 R7 R8 R9 R10\n");
+	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
+		if (p_shmMsg->pcb[i].pid != 0) {
+			printf("%6d ", p_shmMsg->pcb[i].pid);
+			for (int j = 0; j < MAX_RESOURCE_COUNT; j++) {
+				int resourceType = (int) (p_shmMsg->pcb[i].resources[j] / 100);
+				printf("%2d ", resourceType);
+			}
+		}
+		printf("\n");
+	}
+}
+
+int countAllocatedResourcesFromPcbs(int resource) {
+	int total = 0;
+	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
+		int resourceType = (int) (p_shmMsg->pcb[i].resources[resource - 1] / 100);
+		if (resourceType == resource)
+			total++;
+	}
+	return total;
 }
 

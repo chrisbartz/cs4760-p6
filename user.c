@@ -141,6 +141,8 @@ if (childId < 0) {
 //				continue;
 			} else {
 				// then resource has been granted
+				insert_resource(p_shmMsg->userGrantedResource);
+
 				getTime(timeVal);
 				printf("user %s: Receiving that process %d has been granted resource %d\n", timeVal, (int) getpid(), p_shmMsg->userGrantedResource);
 
@@ -192,10 +194,11 @@ if (childId < 0) {
 					}
 				}
 
-				release_resource(releasedResource);
-
 				// send order to release resource
 				if (releasedResource) {
+
+					release_resource(releasedResource);
+
 					sem_wait(sem);
 					if (p_shmMsg->userPid != 0)
 						sem_post(sem);
@@ -311,7 +314,8 @@ void release_resource(int resource) {
 		if (status == 0 && p_shmMsg->pcb[pcbIndex].resources[i] == resource) {
 			p_shmMsg->pcb[pcbIndex].resources[i] = 0;
 			status = 1;
-			int resourceIndex = (int) (resource/100) - 1;
+			int resourceIndex = (int) (resource/100);
+			if (1|| VERBOSE && DEBUG) printf("user: process %d decrementing resource index: %d\n", (int) getpid(), resourceIndex);
 			p_shmMsg->resourcesGrantedCount[resourceIndex]--;
 		}
 	}

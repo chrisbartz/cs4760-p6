@@ -8,7 +8,6 @@
 
 #include "sharedMemory.h"
 
-
 int pop(int queue[]);
 
 int peek(int queue[]);
