@@ -27,6 +27,8 @@
 const int maxChildProcessCount = 100; // limit of total child processes spawned
 const long maxWaitInterval = 500; // limit on how many milliseconds to wait until we spawn the next child
 
+int childProcessCount = 0; // number of child processes spawned
+int dispatchedProcessCount = 0; // number of dispatched child processes
 int totalChildProcessCount = 0; // number of total child processes spawned
 int signalIntercepted = 0; // flag to keep track when sigint occurs
 int childrenDispatching = 0; // count of dispatched children
@@ -42,6 +44,7 @@ int resourceRequests = 0;
 int resourcesGranted = 0;
 int resourcesQueued = 0;
 int resourceReleases = 0;
+int pcbMap[MAX_PROCESS_CONTROL_BLOCKS]; // for keeping track of used pcb blocks
 
 long long totalTurnaroundTime; // these are for the after action report
 long long totalWaitTime;
@@ -81,10 +84,11 @@ int countAllocatedResourcesFromPcbs(int resource);
 
 int findAvailableResource(int resource); // find if resource is available
 void enqueueResourceRequest(int pid, int resource); // add request to queue
+void checkForDeadlocks();
+void killProcess(int pid);
 
 int main(int argc, char *argv[]) {
-	int childProcessCount = 0; // number of child processes spawned
-	int dispatchedProcessCount = 0; // number of dispatched child processes
+
 //	int maxDispatchedProcessCount = 1; // limit to number of dispatched child processes
 	int opt; // to support argument switches below
 	pid_t childpid; // store child pid
@@ -94,8 +98,6 @@ int main(int argc, char *argv[]) {
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
 	int totalRunSeconds = 2; // set default total run time in real seconds
 	int goClock = 0; // triggers the time keeping
-
-	int pcbMap[MAX_PROCESS_CONTROL_BLOCKS]; // for keeping track of used pcb blocks
 
 	// set up priority queues
 //	int priQueues[3][MAX_PROCESS_CONTROL_BLOCKS]; 						// the actual priority queue array; stores pcb #
@@ -291,8 +293,13 @@ int main(int argc, char *argv[]) {
 
 			// wait for child to send message
 			if (p_shmMsg->userPid == 0) { // if no message
+
 				if (ossUSeconds > 0 && ossUSeconds % (quantum * 500) == 0) // limit queue check to every 500 loops
 					checkResourceRequestQueue(); // check to see if any requested resources are available
+
+				if (ossUSeconds > 0 && ossUSeconds % (quantum * 1000) == 0) // limit deadlock check to every 1000 loops
+					checkForDeadlocks();
+
 				continue; // jump back to the beginning of the loop if still waiting for message
 			}
 
@@ -805,5 +812,114 @@ int countAllocatedResourcesFromPcbs(int resource) {
 			total++;
 	}
 	return total;
+}
+
+void checkForDeadlocks() {
+	getTime(timeVal);
+	printf("\n\nOSS  %s: running deadlock detection at my time %d.%09d\n\n", timeVal, ossSeconds, ossUSeconds);
+
+	int dlResourcesAllocated[MAX_RESOURCE_COUNT];
+	int dlResourcesAvailable[MAX_RESOURCE_COUNT];
+	int dlResourcesRequested[MAX_RESOURCE_COUNT];
+	int dlResourcePids[MAX_PROCESS_CONTROL_BLOCKS];
+	int dlResourceRequestCounts[MAX_PROCESS_CONTROL_BLOCKS][MAX_RESOURCE_COUNT];
+//	int dlResourceAllocatedCounts[MAX_PROCESS_CONTROL_BLOCKS][MAX_RESOURCE_COUNT];
+	int dlProcessCanComplete[MAX_PROCESS_CONTROL_BLOCKS];
+	int dlResourceInContention[MAX_RESOURCE_COUNT];
+	int dlProcessesList[MAX_PROCESS_CONTROL_BLOCKS];
+	int dlCount = 0;
+
+	// initialize arrays
+	for (int i = 0; i < MAX_RESOURCE_COUNT; i++) {
+		dlResourcesAllocated[i] = p_shmMsg->resourcesGrantedCount[i];
+		dlResourcesAvailable[i] = MAX_RESOURCE_QTY - p_shmMsg->resourcesGrantedCount[i];
+		dlResourcesRequested[i] = 0;
+		dlResourcePids[i] = 0;
+		for (int j = 0; j < MAX_PROCESS_CONTROL_BLOCKS; j++) {
+//			dlResourceAllocatedCounts[j][i] = 0;
+			dlResourceRequestCounts[j][i] = 0;
+		}
+		dlProcessCanComplete[i] = 1;
+		dlResourceInContention[i] = 0;
+		dlProcessesList[i] = 0;
+	}
+
+	// build aggregate list of requested resources
+	for (int i = 0; i < MAX_RESOURCE_REQUEST_COUNT; i++) {
+		int resourceType = p_shmMsg->resourceRequestQueue[i][1];
+		if (resourceType < 1)
+			break;
+		dlResourcesRequested[resourceType]++;
+	}
+
+	// run through the request queue and count the resource requests per pid
+	for (int i = 0; i < MAX_RESOURCE_REQUEST_COUNT; i++) {
+		if (p_shmMsg->resourceRequestQueue[i][0] == 0) {
+			break;
+		}
+
+		int pidExists = -1;
+		int pidListEnds = -1;
+
+		// find if pid already exists in the pid list
+		for (int j = 0; j < MAX_PROCESS_CONTROL_BLOCKS; j++) {
+			if (dlResourcePids[j] == p_shmMsg->resourceRequestQueue[i][0]) {
+				pidExists = j;
+			} else if (dlResourcePids[j] == 0) {
+				pidListEnds = j;
+				break;
+			}
+		}
+
+		// if it exists then increment
+		if (pidExists > -1) {
+			dlResourceRequestCounts[pidExists][p_shmMsg->resourceRequestQueue[i][1] - 1]++;
+		} else { // if not create the pid slot and increment
+			dlResourcePids[pidListEnds] = p_shmMsg->resourceRequestQueue[i][0];
+			dlResourceRequestCounts[pidListEnds][p_shmMsg->resourceRequestQueue[i][1] - 1]++;
+		}
+	}
+
+	// find which processes can complete
+	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
+		for (int j = 0; j < MAX_RESOURCE_COUNT; j++) {
+			if (dlResourcesAvailable[j] < dlResourceRequestCounts[i][j]) {
+				dlProcessCanComplete[i] = 0;
+				dlResourceInContention[j] = 1;
+			}
+		}
+	}
+
+	// report which processes are deadlocked
+	for (int i = 0, j = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
+		if (!dlProcessCanComplete[i]) {
+			dlCount++;
+			dlProcessesList[j++] = dlResourcePids[i];
+			getTime(timeVal);
+			printf("OSS  %s: process %d is deadlocked at my time %d.%09d\n", timeVal, dlResourcePids[i], ossSeconds, ossUSeconds);
+		}
+	}
+
+	// and kill them all (a tough policy, but equally fair to all processes)
+	for (int i = 0; i < dlCount; i++) {
+		if (dlProcessesList[i] != 0) {
+			killProcess(dlProcessesList[i]);
+		} else {
+			break;
+		}
+	}
+}
+
+void killProcess(int pid) {
+	int pcbIndex = pcbFindIndex(pid);
+
+	kill(pid, SIGTERM);
+	pcbDelete(pcbMap, pcbIndex);
+
+	dispatchedProcessCount--; // because a child process is no longer dispatched
+	childProcessCount--; // because a child process completed
+
+	getTime(timeVal);
+	printf("OSS  %s: process %d has been terminated due to a deadlock at my time %d.%09d\n", timeVal, pid, ossSeconds, ossUSeconds);
 }
 

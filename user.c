@@ -187,7 +187,7 @@ if (childId < 0) {
 				int releasedResource = 0;
 
 				// first find a resource to release
-				for (int i = 0; i < 100; i++) {
+				for (int i = 0; i < MAX_RESOURCES; i++) {
 					if (p_shmMsg->pcb[pcbIndex].resources[i] != 0) {
 						releasedResource = p_shmMsg->pcb[pcbIndex].resources[i];
 						break;
