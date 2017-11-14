@@ -13,7 +13,7 @@
 #include "timestamp.h"
 #include "queue.h"
 
-#define DEBUG 1 			// setting to 1 greatly increases number of logging events
+#define DEBUG 0 			// setting to 1 greatly increases number of logging events
 #define VERBOSE 0 			// setting to 1 greatly increases number of logging events
 #define TUNING 0
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
@@ -282,11 +282,6 @@ void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset) {
 }
 
 int get_random(int modulus) {
-//	struct timespec sleeptime;
-//	sleeptime.tv_sec = 0;
-//	sleeptime.tv_nsec = 15 * 1000 * 1000;
-//	nanosleep(&sleeptime, NULL);
-
 	return rand() % modulus;
 }
 
