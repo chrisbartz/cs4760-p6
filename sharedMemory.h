@@ -9,14 +9,20 @@
 // set up shared memory keys for communication
 #define SHM_MSG_KEY 98753
 #define SHMSIZE sizeof(SmStruct)
-#define SEM_NAME "cyb01b_p5"
+#define SEM_NAME "cyb01b_p6"
 #define MAX_PROCESS_CONTROL_BLOCKS 18
-#define MAX_RESOURCE_DESCRIPTORS 20
-#define MAX_RESOURCE_COUNT 20
-#define MAX_RESOURCE_QTY 10
-#define MAX_RESOURCE_REQUEST_COUNT 1000
-#define RESOURCE_DESCRIPTOR_MOD 5
-#define MAX_RESOURCES 20
+#define MAX_SYSTEM_MEMORY 256
+#define MAX_USER_SYSTEM_MEMORY 32
+#define SYSTEM_MEMORY_PAGE 1
+#define NO_PAGE_WAIT 10
+#define DISK_WAIT (15*1000*1000)
+#define MAX_SYSTEM_MEMORY_MAINTENANCE (MAX_SYSTEM_MEMORY*.9)
+#define PAGE_STATUS_FREE 0
+#define PAGE_STATUS_OCCUPIED 1
+#define PAGE_STATUS_DIRTY 2
+#define PAGE_SECOND_CHANCE_EMPTY 0
+#define PAGE_SECOND_CHANCE_CLEAN 1
+#define PAGE_SECOND_CHANCE_DIRTY -1
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -29,18 +35,6 @@
 #include <sys/stat.h>
 
 typedef struct {
-	int resourceId;
-} SmResourceDescriptorInstance;
-
-typedef struct {
-	int request;
-	int allocation;
-	int release;
-	int sharable;
-	SmResourceDescriptorInstance resInstances[MAX_RESOURCE_COUNT];
-} SmResourceDescriptor;
-
-typedef struct {
 	int startUserSeconds;
 	int startUserUSeconds;
 	int endUserSeconds;
@@ -48,30 +42,28 @@ typedef struct {
 	int totalCpuTime;
 	int totalTimeInSystem;
 	int lastBurstLength;
-	int processPriority;
+	int requestedMemory;
 	int pid;
-	int resources[100];
+	int pages[MAX_USER_SYSTEM_MEMORY];
 } SmProcessControlBlock;
 
 typedef struct {
 	int ossSeconds;
 	int ossUSeconds;
-//	int dispatchedPid;
-//	int dispatchedTime;
 	int userPid;
 	int userHaltSignal; // 1 terminated
 	int userHaltTime;
-	int userResource;
-	int userRequestOrRelease; // 0 none 1 request 2 release
-	int userGrantedResource;
+	int pageTable[MAX_SYSTEM_MEMORY]; 						// stores the value of the user pid
+	int pageTableUserPageReference[MAX_SYSTEM_MEMORY];		// stores the user pid page reference
+	int pageStatus[MAX_SYSTEM_MEMORY];						// stores the status of the pageTable
+	int pageTableSecondChanceBit[MAX_SYSTEM_MEMORY];
 	SmProcessControlBlock pcb[MAX_PROCESS_CONTROL_BLOCKS];
-	SmResourceDescriptor resDesc[MAX_RESOURCE_DESCRIPTORS];
-	int resourcesGrantedCount[MAX_RESOURCE_COUNT];
-	int resourceRequestQueue[MAX_RESOURCE_REQUEST_COUNT][2]; // 0: pid 1: resource request
 } SmStruct;
 
 sem_t* open_semaphore(int createSemaphore);
 
 void close_semaphore(sem_t *sem);
+
+void printPageTable();
 
 #endif /* SHAREDMEMORY_H_ */
