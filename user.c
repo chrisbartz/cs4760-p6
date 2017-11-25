@@ -1,7 +1,7 @@
 //Christopher Bartz
 //cyb01b
 //CS4760 S02
-//Project 5
+//Project 6
 
 #include <stdio.h>
 #include <stdlib.h>

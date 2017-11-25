@@ -1,7 +1,7 @@
 //Christopher Bartz
 //cyb01b
 //CS4760 S02
-//Project 5
+//Project 6
 
 syntax: ./oss <arguments>
 
@@ -12,7 +12,9 @@ arguments:
 -t # will set the total number of real seconds OSS will limit its run.  Default is 2.
 -h 	 will print a help message.
 
-Source with revision control is at https://github.com/chrisbartz/cs4760-p5
+Source with revision control is at https://github.com/chrisbartz/cs4760-p6
+
+%%%%%%%%%%%%% BELOW THIS LINE NEEDS TO BE UPDATED %%%%%%%%%%%%%%%
 
 The project has most requirements working or at least attempted:
 

@@ -1,7 +1,7 @@
 //Christopher Bartz
 //cyb01b
 //CS4760 S02
-//Project 5
+//Project 6
 
 #include <errno.h>
 #include <stdio.h>
@@ -17,12 +17,9 @@
 #include "timestamp.h"
 #include "queue.h"
 
-#define DEBUG 0							// setting to 1 greatly increases number of logging events
-#define VERBOSE 0						// setting to 1 makes it even worse than DEBUG
+#define DEBUG 1							// setting to 1 greatly increases number of logging events
+#define VERBOSE 1						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
-//#define PRIQUEUEHI 5000					// this is the time limit of the hi priority queue
-//#define PRIQUEUEMED 500000				// this is the time limit of the med priority queue
-//#define PRIQUEUELO 50000000				// this is the time limit of the lo priority queue
 
 const int maxChildProcessCount = 100; // limit of total child processes spawned
 const long maxWaitInterval = 500; // limit on how many milliseconds to wait until we spawn the next child
@@ -50,10 +47,6 @@ long long totalTurnaroundTime; // these are for the after action report
 long long totalWaitTime;
 int totalProcesses;
 long long totalCpuIdleTime;
-
-//const int hipri = 0;					// index of priority queues
-//const int medpri = 1;
-//const int lopri = 2;
 
 FILE *logFile;
 
