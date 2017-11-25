@@ -7,12 +7,12 @@ syntax: ./oss <arguments>
 
 arguments:
 -l testfilename will specify a custom log filename.  Default is log.out.
--q # will set a custom quantum amount for incrementing the OSS clock each cycle.  Default is 10000.
+-q # will set a custom quantum amount for incrementing the OSS clock each cycle.  Default is 100000.
 -s # will set the number of concurrent slave processes.  Default is 18. 
--t # will set the total number of real seconds OSS will limit its run.  Default is 20.
+-t # will set the total number of real seconds OSS will limit its run.  Default is 2.
 -h 	 will print a help message.
 
-Source with revision control is at https://github.com/chrisbartz/cs4760-p4
+Source with revision control is at https://github.com/chrisbartz/cs4760-p5
 
 The project has most requirements working or at least attempted:
 
@@ -24,47 +24,47 @@ Parent:
 OSS forks multiple children at "randomized" times
 OSS keeps a simulated clock
 OSS allocates shared memory
-OSS allocates process control blocks (x18)
-OSS keeps track of total CPU time, total time in system, time used in last burst, process priority
-OSS has local bit vector to keep track of used PCBs
-OSS creates children at around a child per second
-OSS updates oss clock which keeps time in seconds, nanoseconds
-OSS clock is available in shared memory to all processes, including child processes
-OSS runs concurrently with user processes
-OSS loops and schedules and creates processes
-OSS generates a PCB for each child process
-OSS child execls the user program
-OSS advances the oss clock (but not by 1 second each loop because of wanting to control the oss clock rate)
-OSS utilizes a random variable plus system clock to control child creation
-OSS schedules for a single process (with multiple possible) to be dispatched from the priority queues
-OSS maintains multi level process queue with priority
-OSS will demote long running processes to lower priority queues
-OSS has #defined priority queue values
-OSS dispatches processes based on priority by placing pid and time quantum in shared memory
-OSS terminates all children on SIGINT
-OSS still DOES NOT completely delete shared memory, despite the commands to do so
+OSS allocates resources (x20)
+OSS keeps track of total CPU time
+OSS keeps track of resource requests (unavailable resource requests are put into a queue)
+OSS keeps track of resource allocation and release (with some issues - the resource management needs some work as it loses accurate count)
+OSS keeps resource "descriptors" in shared memory
+OSS DOES NOT have sharable resources - ran out of time with other issues
+OSS initializes resources with 10 qty available
+OSS forks at random times between 1 and 500 ms
+OSS limits the number of child processes to 18 by default
+OSS grants resources to child processes as long as there are resources available (otherwise queues the requests)
+OSS ATTEMPTED to resolve deadlocks but ran out of time dealing with issues to fully implement
+OSS prints a resource map every so many requests
+OSS DOES NOT release all resources by terminated children (I thought I wrote a function for this but might have been causing some seg faults)
+OSS policy to resolve deadlocks was kill all deadlocked processes
+OSS limits run time to 2 real seconds
+OSS keeps track of statistics during run time including # requests granted, # resources terminate normally 
+OSS DOES NOT keep track of # processes terminated by deadlock detection, how many times deadlock detection was run because that was not completed
+OSS sends SIGTERM to all processes on SIGINT
+OSS cleanup of shared memory continues to be a problem
+
 
 Children:
-USER checks shared memory for the signal to start executing and then starts when it receives the signal
-USER utilizes random number to determine whether it uses the entire quantum or partial
-USER utilizes random number to determine whether the amound of partial quantum it uses
-USER sends message when halted/terminated to OSS which updates PCB stats
-USER is assigned a queue after it halts execution
-USER checks to see if it is done executing and then sends appropriate signal to OSS who removes PCB when USER is terminated
+USER requests resources at random times
+USER has a bound on when a process can request or release a resource constrained by random selection
+USER requests resources through shared memory
+USER waits for requested resources to be allocated 
+USER sends message when halted/terminated to OSS 
+USER checks to see if it should terminate at random times
+USER 
 
 Others:
 project is available in Github
 makefile implemented
 README implemented
-PCB process control block contains information on managing child process scheduling
-PCB is in shared memory and readable by child process
 Simulation ends with execution statistics including average turnaround time, average wait time, idle CPU time
 
 There are a few example commands that work for this project
 
 ./oss 
 ./oss -l thisisastrangelogfilename.log
-./oss -q 10001
+./oss -q 100001
 ./oss -s 5
 ./oss -t 5000
 ./oss -l notagreatcombo.log -q 1 -s 15 -t 5000
