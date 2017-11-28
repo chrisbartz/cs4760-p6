@@ -21,7 +21,7 @@
 #define VERBOSE 1						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
 
-const int maxChildProcessCount = 100; // limit of total child processes spawned
+const int maxChildProcessCount = 10; // limit of total child processes spawned
 const long maxWaitInterval = 500; // limit on how many milliseconds to wait until we spawn the next child
 
 int childProcessCount = 0; // number of child processes spawned
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
 //	int maxDispatchedProcessCount = 1; // limit to number of dispatched child processes
 	int opt; // to support argument switches below
 	pid_t childpid; // store child pid
-	int maxConcSlaveProcesses = 18; // max concurrent child processes
+	int maxConcSlaveProcesses = 2; // max concurrent child processes
 	int maxOssTimeLimitSeconds = 10000; // max run time in oss seconds
 	char logFileName[50]; // name of log file
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
@@ -80,6 +80,8 @@ int main(int argc, char *argv[]) {
 	int interval = (rand() % maxWaitInterval);
 	int nextChildTimeSeconds; // save the next scheduled time for a child to be spawned
 	int nextChildTimeUSeconds; // save the next scheduled time for a child to be spawned
+
+	int currentPageTableReference = 0;
 
 	//gather option flags
 	while ((opt = getopt(argc, argv, "hl:q:s:t:")) != -1) {
@@ -158,6 +160,23 @@ int main(int argc, char *argv[]) {
 	}
 
 	printPageTable(p_shmMsg);
+
+
+	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+	printf("Next Page Table Reference: %d\n", findNextReclaimableFrame(p_shmMsg, &currentPageTableReference));
+
+	int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
+
+	assignFrame(p_shmMsg, frameId, 1234);
+	accessFrame(p_shmMsg, frameId, 1234);
+	accessFrame(p_shmMsg, frameId, 1235);
+
+	freeFrames(p_shmMsg, 1234);
+
 
 	// create semaphore
 	sem = open_semaphore(1);

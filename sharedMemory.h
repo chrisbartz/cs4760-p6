@@ -16,13 +16,13 @@
 #define SYSTEM_MEMORY_PAGE 1
 #define NO_PAGE_WAIT 10
 #define DISK_WAIT (15*1000*1000)
-#define MAX_SYSTEM_MEMORY_MAINTENANCE (MAX_SYSTEM_MEMORY*.9)
+#define MAX_SYSTEM_MEMORY_MAINTENANCE (int)(MAX_SYSTEM_MEMORY*.9)
 #define PAGE_STATUS_FREE 0
 #define PAGE_STATUS_OCCUPIED 1
 #define PAGE_STATUS_DIRTY 2
 #define PAGE_SECOND_CHANCE_EMPTY 0
-#define PAGE_SECOND_CHANCE_CLEAN 1
-#define PAGE_SECOND_CHANCE_DIRTY -1
+#define PAGE_SECOND_CHANCE_RECENTLY_USED 1
+#define PAGE_SECOND_CHANCE_RECLAIMABLE -1
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -65,5 +65,19 @@ sem_t* open_semaphore(int createSemaphore);
 void close_semaphore(sem_t *sem);
 
 void printPageTable();
+
+int pageTableIsNearLimit(SmStruct *p_shmMsg);
+
+void pageTableMaintenance(SmStruct *p_shmMsg);
+
+int findNextReclaimableFrame(SmStruct *p_shmMsg, int *currentPageTableReference);
+
+int* incrementPageTableReference(int *currentPageTableReference);
+
+void assignFrame(SmStruct *p_shmMsg, int frameId, int pid);
+
+int accessFrame(SmStruct *p_shmMsg, int frameId, int pid);
+
+void freeFrames(SmStruct *p_shmMsg, int pid);
 
 #endif /* SHAREDMEMORY_H_ */
