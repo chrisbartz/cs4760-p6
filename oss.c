@@ -171,12 +171,19 @@ int main(int argc, char *argv[]) {
 
 	int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
 
-	assignFrame(p_shmMsg, frameId, 1234);
-	accessFrame(p_shmMsg, frameId, 1234);
-	accessFrame(p_shmMsg, frameId, 1235);
+	assignFrame(p_shmMsg, frameId, 1234, 1);
+	accessFrame(p_shmMsg, 1234, 1); // should be a page hit
+	accessFrame(p_shmMsg, 1234, 2); // should be a page fault
+
+	printPageTable(p_shmMsg);
+
+	pageTableMaintenance(p_shmMsg);
+
+	printPageTable(p_shmMsg);
 
 	freeFrames(p_shmMsg, 1234);
 
+	printPageTable(p_shmMsg);
 
 	// create semaphore
 	sem = open_semaphore(1);

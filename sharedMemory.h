@@ -74,9 +74,9 @@ int findNextReclaimableFrame(SmStruct *p_shmMsg, int *currentPageTableReference)
 
 int* incrementPageTableReference(int *currentPageTableReference);
 
-void assignFrame(SmStruct *p_shmMsg, int frameId, int pid);
+void assignFrame(SmStruct *p_shmMsg, int frameId, int pid, int pidReference);
 
-int accessFrame(SmStruct *p_shmMsg, int frameId, int pid);
+int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference);
 
 void freeFrames(SmStruct *p_shmMsg, int pid);
 

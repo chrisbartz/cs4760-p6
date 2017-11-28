@@ -22,6 +22,7 @@ void close_semaphore(sem_t *sem) {
 }
 
 void printPageTable(SmStruct *p_shmMsg) {
+
 	printf("Page Table:\n");
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
 		if (p_shmMsg->pageStatus[i] == PAGE_STATUS_FREE)
@@ -34,13 +35,14 @@ void printPageTable(SmStruct *p_shmMsg) {
 			printf("X");
 	}
 	printf("\n");
+
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
 		if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_EMPTY)
 			printf(".");
 		else if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_RECENTLY_USED)
-			printf("0");
-		else if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_RECLAIMABLE)
 			printf("1");
+		else if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_RECLAIMABLE)
+			printf("0");
 		else
 			printf("X");
 	}
@@ -69,8 +71,10 @@ void pageTableMaintenance(SmStruct *p_shmMsg) {
 	if (DEBUG) printf("sharedMemory: Starting page table maintenance\n");
 
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
-		if (p_shmMsg->pageTable > 0)
+		if (p_shmMsg->pageTable[i] > 0) {
 			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_RECLAIMABLE;
+			p_shmMsg->pageStatus[i] = PAGE_STATUS_OCCUPIED;
+		}
 	}
 }
 
@@ -97,29 +101,29 @@ int* incrementPageTableReference(int *currentPageTableReference) {
 	return currentPageTableReference;
 }
 
-void assignFrame(SmStruct *p_shmMsg, int frameId, int pid) {
+void assignFrame(SmStruct *p_shmMsg, int frameId, int pid, int pidReference) {
 	if (DEBUG) printf("sharedMemory: Assigning frame %d to pid %d\n", frameId, pid);
 
 	p_shmMsg->pageTable[frameId] = pid;
+	p_shmMsg->pageTableUserPageReference[frameId] = pidReference;
 	p_shmMsg->pageStatus[frameId] = PAGE_STATUS_OCCUPIED;
 	p_shmMsg->pageTableSecondChanceBit[frameId] = PAGE_SECOND_CHANCE_RECENTLY_USED;
 
 }
 
-int accessFrame(SmStruct *p_shmMsg, int frameId, int pid) {
-	if (DEBUG) printf("sharedMemory: Pid %d attempting to access frame %d\n", pid, frameId);
+int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference) {
+	if (DEBUG) printf("sharedMemory: Pid %d attempting to access frame with pidReference %d\n", pid, pidReference);
 
-	if (p_shmMsg->pageTable[frameId] != pid) {
-		printf("sharedMemory: Error! Pid %d attempted to access a frame %d that is assigned to pid %d\n", pid, frameId, p_shmMsg->pageTable[frameId]);
-		return 0;
+	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {															// check to see if page is in memory
+		if (p_shmMsg->pageTable[i] == pid && p_shmMsg->pageTableUserPageReference[i] == pidReference) {
+			printf("sharedMemory: PAGE HIT: Pid %d successfully accessed a page that is assigned pidReference %d\n", pid, pidReference); // if found
+			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_RECENTLY_USED;
+			return 1;
+		}
 	}
 
-	if (p_shmMsg->pageStatus[frameId] == PAGE_STATUS_FREE) {
-		printf("sharedMemory: Error! Pid %d attempted to access a frame %d that is not assigned a pid\n", pid, frameId);
-		return 0;
-	}
-
-	return 1; // success
+	printf("sharedMemory: PAGE FAULT: Pid %d attempted to access a page with pidReference %d which had to be retrieved from disk\n", pid, pidReference);
+	return 0;																								// if not found
 }
 
 void freeFrames(SmStruct *p_shmMsg, int pid) {
@@ -128,6 +132,7 @@ void freeFrames(SmStruct *p_shmMsg, int pid) {
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
 		if (p_shmMsg->pageTable[i] == pid) {
 			p_shmMsg->pageTable[i] = 0;
+			p_shmMsg->pageTableUserPageReference[i] = 0;
 			p_shmMsg->pageStatus[i] = PAGE_STATUS_FREE;
 			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_EMPTY;
 		}
