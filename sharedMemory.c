@@ -47,11 +47,6 @@ void printPageTable(SmStruct *p_shmMsg) {
 			printf("X");
 	}
 	printf("\n");
-//
-//	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
-//		printf("%d", p_shmMsg->pageTableSecondChanceBit[i]);
-//	}
-//		printf("\n");
 }
 
 int pageTableIsNearLimit(SmStruct *p_shmMsg) {
@@ -122,6 +117,7 @@ int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference) {
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {															// check to see if page is in memory
 		if (p_shmMsg->pageTable[i] == pid && p_shmMsg->pageTableUserPageReference[i] == pidReference) {
 			printf("sharedMemory: PAGE HIT: Pid %d successfully accessed a page that is assigned pidReference %d\n", pid, pidReference); // if found
+			p_shmMsg->pageStatus[i] = PAGE_STATUS_DIRTY;
 			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_RECENTLY_USED;
 			return 1;
 		}
@@ -142,4 +138,24 @@ void freeFrames(SmStruct *p_shmMsg, int pid) {
 			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_EMPTY;
 		}
 	}
+}
+
+int scanRequests(SmStruct *p_shmMsg) {
+	if (DEBUG) printf("sharedMemory: Scanning PCBs for memory requests\n");
+
+	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
+		if (p_shmMsg->pcb[i].requestedPage != 0) {
+			return i;
+		}
+	}
+	return PCB_SCAN_NO_REQUESTS;
+}
+
+void grantRequest(SmStruct *p_shmMsg, int pcbId) {
+	if (DEBUG) printf("sharedMemory: Granting memory request to PCB %d \n", pcbId);
+
+	int request = p_shmMsg->pcb[pcbId].requestedPage;
+
+	p_shmMsg->pcb[pcbId].requestedPage = 0;
+	p_shmMsg->pcb[pcbId].returnedPage = request;
 }

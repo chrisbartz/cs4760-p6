@@ -23,6 +23,9 @@
 #define PAGE_SECOND_CHANCE_EMPTY 0
 #define PAGE_SECOND_CHANCE_RECENTLY_USED 1
 #define PAGE_SECOND_CHANCE_RECLAIMABLE -1
+#define PCB_SCAN_NO_REQUESTS -1
+#define PAGE_FAULT 0
+#define PAGE_HIT 1
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -42,7 +45,8 @@ typedef struct {
 	int totalCpuTime;
 	int totalTimeInSystem;
 	int lastBurstLength;
-	int requestedMemory;
+	int requestedPage;
+	int returnedPage;
 	int pid;
 	int pages[MAX_USER_SYSTEM_MEMORY];
 } SmProcessControlBlock;
@@ -79,5 +83,9 @@ void assignFrame(SmStruct *p_shmMsg, int frameId, int pid, int pidReference);
 int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference);
 
 void freeFrames(SmStruct *p_shmMsg, int pid);
+
+int scanRequests(SmStruct *p_shmMsg);
+
+void grantRequest(SmStruct *p_shmMsg, int pcbId);
 
 #endif /* SHAREDMEMORY_H_ */

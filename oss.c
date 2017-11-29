@@ -162,28 +162,28 @@ int main(int argc, char *argv[]) {
 	printPageTable(p_shmMsg);
 
 
-	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-	printf("Next Page Table Reference: %d\n", findNextReclaimableFrame(p_shmMsg, &currentPageTableReference));
-
-	int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
-
-	assignFrame(p_shmMsg, frameId, 1234, 1);
-	accessFrame(p_shmMsg, 1234, 1); // should be a page hit
-	accessFrame(p_shmMsg, 1234, 2); // should be a page fault
-
-	printPageTable(p_shmMsg);
-
-	pageTableMaintenance(p_shmMsg);
-
-	printPageTable(p_shmMsg);
-
-	freeFrames(p_shmMsg, 1234);
-
-	printPageTable(p_shmMsg);
+//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
+//	printf("Next Page Table Reference: %d\n", findNextReclaimableFrame(p_shmMsg, &currentPageTableReference));
+//
+//	int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
+//
+//	assignFrame(p_shmMsg, frameId, 1234, 1);
+//	accessFrame(p_shmMsg, 1234, 1); // should be a page hit
+//	accessFrame(p_shmMsg, 1234, 2); // should be a page fault
+//
+//	printPageTable(p_shmMsg);
+//
+//	pageTableMaintenance(p_shmMsg);
+//
+//	printPageTable(p_shmMsg);
+//
+//	freeFrames(p_shmMsg, 1234);
+//
+//	printPageTable(p_shmMsg);
 
 	// create semaphore
 	sem = open_semaphore(1);
@@ -278,24 +278,25 @@ int main(int argc, char *argv[]) {
 			goClock = 1; // start the clock when max concurrent child processes are spawned
 
 			// wait for child to send message
-			if (p_shmMsg->userPid == 0) { // if no message
-
-				continue; // jump back to the beginning of the loop if still waiting for message
+			int pcbIndex = scanRequests(p_shmMsg);
+			int userPid = 0;
+			int requestedPage = 0;
+			if (pcbIndex == PCB_SCAN_NO_REQUESTS) { // if no memory requests
+				if (p_shmMsg->userPid != 0) { // check for child termination
+					pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
+					userPid = p_shmMsg->userPid;
+				} else {
+					continue; // jump back to the beginning of the loop if still waiting for message
+				}
+			} else { // we have a memory request
+				userPid = p_shmMsg->pcb[pcbIndex].pid;
+				requestedPage = p_shmMsg->pcb[pcbIndex].requestedPage;
 			}
 
 			// if message sent
-			int userPid = p_shmMsg->userPid;
 
-//			getTime(timeVal);
-//			if (DEBUG && VERBOSE)
-//				if (p_shmMsg->userGrantedResource == 0) // added this check because OSS grants resources with userPid populated
-//					printf("OSS  %s: OSS has detected child %d has sent a signal (userHalt:%d, requestOrRelease:%d, userResource:%d, userGrantedResource:%d) at my time %d.%09d\n",
-//							timeVal, p_shmMsg->userPid, p_shmMsg->userHaltSignal, p_shmMsg->userRequestOrRelease, p_shmMsg->userResource, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
-
-			int pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
-
-			getTime(timeVal); // the user process is sending a message
-			if (p_shmMsg->userHaltSignal == 1) { // process is terminating
+			getTime(timeVal);
+			if (p_shmMsg->userPid != 0 && p_shmMsg->userHaltSignal == 1) { // process is terminating
 				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
 
 				// book keeping
@@ -305,106 +306,42 @@ int main(int argc, char *argv[]) {
 				dispatchedProcessCount--; // because a child process is no longer dispatched
 				childProcessCount--; // because a child process completed
 
-				// release all resources
+				// release all memory frames
+				freeFrames(p_shmMsg, userPid);
 
 				// clear the child signals
 				p_shmMsg->userPid = 0;
 				p_shmMsg->userHaltSignal = 0;
 				p_shmMsg->userHaltTime = 0;
 
-			}
-//			else if (p_shmMsg->userRequestOrRelease != 0) {
-//				if (p_shmMsg->userRequestOrRelease == 1) { // this is a request for a resource
-//					if (DEBUG) printf("OSS  %s: Child %d is requesting a resource %d at my time %d.%09d\n",
-//							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
-//
-//					fprintf(logFile, "OSS  %s: Child %d is requesting a resource %d at my time %d.%09d\n",
-//							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
-//
-//					resourceRequests++;
-//
-//					int resourceValue = findAvailableResource(p_shmMsg->userResource);
-//
-//					// check whether resource is available
-//					if (resourceValue && countAllocatedResourcesFromPcbs(p_shmMsg->userResource) < MAX_RESOURCE_QTY) {
-//						p_shmMsg->userGrantedResource = resourceValue;
-//						p_shmMsg->userPid = userPid;
-//						resourcesGranted++; // if resource available
-//
-//						if (resourcesGranted % 20 == 0)
-//							printAllocatedResourceMap();
-//
-//						getTime(timeVal);
-//						if (DEBUG) printf("OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
-//								timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
-//
-//						fprintf(logFile, "OSS  %s: Child %d has been granted resource %d at my time %d.%09d\n",
-//								timeVal, p_shmMsg->userPid, p_shmMsg->userGrantedResource, ossSeconds, ossUSeconds);
-//
-//					} else { // if resource not available queue it
-//						enqueueResourceRequest(p_shmMsg->userPid, p_shmMsg->userResource);
-//						resourcesQueued++;
-//
-//						if (DEBUG) printf("OSS  %s: Child %d resource request for %d has been queued at my time %d.%09d\n",
-//								timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
-//
-//						fprintf(logFile, "OSS  %s: Child %d resource request for %d has been queued at my time %d.%09d\n",
-//								timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
-//
-//						p_shmMsg->userGrantedResource = 0;
-//						p_shmMsg->userPid = 0;
-//					}
-//
-//					// clear the child signals
-//					p_shmMsg->userHaltSignal = 0;
-//					p_shmMsg->userHaltTime = 0;
-//					p_shmMsg->userRequestOrRelease = 0;
-//					p_shmMsg->userResource = 0;
-//
-//
-//				} else if (p_shmMsg->userRequestOrRelease == 2) { // this is a release of a resource
-//					if (DEBUG) printf("OSS  %s: Child %d is releasing a resource %d at my time %d.%09d\n",
-//							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
-//
-//					fprintf(logFile, "OSS  %s: Child %d is releasing a resource %d at my time %d.%09d\n",
-//							timeVal, p_shmMsg->userPid, p_shmMsg->userResource, ossSeconds, ossUSeconds);
-//
-//					resourceReleases++;
-//
-//					// clear the child signals
-//					p_shmMsg->userPid = 0;
-//					p_shmMsg->userHaltSignal = 0;
-//					p_shmMsg->userHaltTime = 0;
-//					p_shmMsg->userRequestOrRelease = 0;
-//					p_shmMsg->userResource = 0;
-//				}
-//			} else if (p_shmMsg->userGrantedResource == 0) {
-//				// incomplete message
-//				lastSignalPid = p_shmMsg->userPid;
-//				signalRetries++;
-//				if (signalRetries > 4) { // if message is not fixed in 5 tries then reset it
-//					signalRetries = 0;
-//					p_shmMsg->userPid = 0;
-//					p_shmMsg->userHaltSignal = 0;
-//					p_shmMsg->userHaltTime = 0;
-//					p_shmMsg->userRequestOrRelease = 0;
-//					p_shmMsg->userResource = 0;
-//					p_shmMsg->userGrantedResource = 0;
-//
-//					getTime(timeVal);
-//					if (DEBUG) printf("OSS  %s: message from child %d (no status determined) has been reset at my time %d.%09d\n",
-//							timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
-//				}
-//			}
+			} else { // handle memory request
+				getTime(timeVal);
+				if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a memory request for page %d at my time %d.%09d\n",
+							timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
 
-//			}
+				int pageStatus = accessFrame(p_shmMsg, userPid, requestedPage);
+
+				if (pageStatus == PAGE_FAULT) {
+					getTime(timeVal);
+					if (DEBUG) printf("OSS  %s: OSS has detected a PAGE FAULT in child %d memory request for page %d at my time %d.%09d\n",
+							timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
+
+					int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
+					increment_clock(DISK_WAIT); // introduce delay for accessing disk
+					assignFrame(p_shmMsg, frameId, userPid, requestedPage); // write page to frame
+				} else {
+					if (DEBUG && VERBOSE) printf("OSS  %s: OSS has detected a PAGE FAULT in child %d memory request for page %d at my time %d.%09d\n",
+							timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
+				}
+
+				grantRequest(p_shmMsg, pcbIndex); // let user process know its request has been fulfilled
+
+			}
 
 		}
 
 		getTime(timeVal);
-		if (DEBUG && VERBOSE)
-			printf("OSS  %s: Process %d CHILD PROCESS COUNT: %d\n", timeVal,
-					getpid(), childProcessCount);
+		if (DEBUG && VERBOSE) printf("OSS  %s: Process %d CHILD PROCESS COUNT: %d\n", timeVal, getpid(), childProcessCount);
 
 		// if there are less than the number of max concurrent child processes we create a new one if possible
 		if (childProcessCount < maxConcSlaveProcesses) {
@@ -419,10 +356,8 @@ int main(int argc, char *argv[]) {
 				continue;
 
 			getTime(timeVal);
-			if (DEBUG && VERBOSE)
-				printf(
-						"OSS  %s: Child (fork #%d from parent) has been assigned pcb index: %d\n",
-						timeVal, totalChildProcessCount, assignedPcb);
+			if (DEBUG && VERBOSE) printf("OSS  %s: Child (fork #%d from parent) has been assigned pcb index: %d\n",
+					timeVal, totalChildProcessCount, assignedPcb);
 
 			char iStr[1]; // format the child # for the execl command
 			sprintf(iStr, " %d", totalChildProcessCount);
@@ -443,18 +378,12 @@ int main(int argc, char *argv[]) {
 			if (childpid == 0) {
 
 				getTime(timeVal);
-				if (DEBUG)
-					printf(
-							"OSS  %s: Child %d (fork #%d from parent) will attempt to execl user\n",
-							timeVal, getpid(), totalChildProcessCount);
+				if (DEBUG) printf("OSS  %s: Child %d (fork #%d from parent) will attempt to execl user\n", timeVal, getpid(), totalChildProcessCount);
 
 				int status = execl("./user", iStr, assignedPcbStr, NULL);
 
 				getTime(timeVal);
-				if (status)
-					printf(
-							"OSS  %s: Child (fork #%d from parent) has failed to execl user error: %d\n",
-							timeVal, totalChildProcessCount, errno);
+				if (status) printf("OSS  %s: Child (fork #%d from parent) has failed to execl user error: %d\n", timeVal, totalChildProcessCount, errno);
 
 				perror("OSS: Child failed to execl() the command");
 				return 1;
@@ -583,9 +512,11 @@ void pcbDelete(int pcbMap[], int index) {
 	pcbMap[index] = 0;
 	p_shmMsg->pcb[index].lastBurstLength = 0;
 	p_shmMsg->pcb[index].pid = 0;
-	p_shmMsg->pcb[index].requestedMemory = 0;
+	p_shmMsg->pcb[index].requestedPage = 0;
+	p_shmMsg->pcb[index].returnedPage = 0;
 	p_shmMsg->pcb[index].totalCpuTime = 0;
 	p_shmMsg->pcb[index].totalTimeInSystem = 0;
+
 	for (int i = 0; i < MAX_USER_SYSTEM_MEMORY; i++) {
 		p_shmMsg->pcb[index].pages[i] = 0;
 	}

@@ -42,13 +42,8 @@ int requestedAResource = 0;
 
 char timeVal[30]; // formatted time values for logging
 
-void do_work(int willRunForThisLong);
 void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset);
 int get_random(int modulus);
-//void init_resources();
-//int count_resources();
-//int insert_resource(int resource);
-//void release_resource(int resource);
 
 int main(int argc, char *argv[]) {
 childId = atoi(argv[0]); // saves the child id passed from the parent process
@@ -82,11 +77,15 @@ if (childId < 0) {
 		perror("sharedMemory: Creating shared memory segment failed\n");
 		exit(1);
 	}
+
 	p_shmMsg = &shmMsg;
 	p_shmMsg = shmat(shmid, NULL, 0);
 
 	startSeconds = p_shmMsg->ossSeconds;
 	startUSeconds = p_shmMsg->ossUSeconds;
+
+	long realStartTime = getUnixTime();
+	long realStopTime = realStartTime + (10 * 1000); // limit user lives to 10 real seconds
 
 	getTime(timeVal);
 	if (TUNING || DEBUG)
@@ -101,8 +100,6 @@ if (childId < 0) {
 	timeperiod.tv_sec = 0;
 	timeperiod.tv_nsec = 5 * 10000;
 
-//	init_resources();
-
 	increment_user_wait_values(p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds,  get_random(MAX_RESOURCE_WAIT));
 	getTime(timeVal);
 	if (DEBUG) printf("user %s: process %d set resource wait to: %d.%09d\n", timeVal, (int) getpid(), userWaitSeconds, userWaitUSeconds);
@@ -110,6 +107,10 @@ if (childId < 0) {
 	while (1) { // main while loop
 
 		nanosleep(&timeperiod, NULL); // reduce the cpu load from looping
+
+		// check to see if a memory request has been granted
+
+		// check to see if a memory request has been made
 
 		// make decision about whether to terminate successfully
 		if (!(p_shmMsg->ossSeconds >= userWaitSeconds && p_shmMsg->ossUSeconds > userWaitUSeconds)) {
@@ -130,140 +131,43 @@ if (childId < 0) {
 
 			}
 
-		// check for requested resource
-//		if (requestedAResource) {
+		// stop user process if we exceed a real time limit
+		if (realStopTime != 0 && realStopTime < getUnixTime())
+			break;
 
-//			getTime(timeVal);
-//			if (DEBUG && VERBOSE) printf("user %s: process %d checking on resource %d reply from OSS\n", timeVal, (int) getpid(), p_shmMsg->userResource);
-//
-//			if (p_shmMsg->userPid != (int) getpid() || p_shmMsg->userGrantedResource == 0) {
-//				// resource has not been granted (yet)
-////				continue;
-//			} else {
-//				// then resource has been granted
-//				insert_resource(p_shmMsg->userGrantedResource);
-//
-//				getTime(timeVal);
-//				printf("user %s: Receiving that process %d has been granted resource %d\n", timeVal, (int) getpid(), p_shmMsg->userGrantedResource);
-//
-//				// keep track of assigned resources
-//				if (!insert_resource(p_shmMsg->userGrantedResource)) {
-//					getTime(timeVal);
-//					printf("user %s: process %d cannot accept resource %d (resource queue full)\n", timeVal, (int) getpid(), p_shmMsg->userGrantedResource);
-//				}
-//
-//				// clear message
-//				sem_wait(sem);
-//				p_shmMsg->userPid = 0;
-//				p_shmMsg->userRequestOrRelease = 0;
-//				p_shmMsg->userResource = 0;
-//				p_shmMsg->userGrantedResource = 0;
-//				sem_post(sem);
-//				requestedAResource = 0;
-//			}
-//		}
 
-		// make decision about whether to request a resource
-//		if ((get_random(MAX_LUCKY_NUMBER)) == luckyNumber) {
-//
-//				if (get_random(BINARY_CHOICE)) { // request a resource
-//					int resource = get_random(MAX_RESOURCE_COUNT) + 1;
-//					sem_wait(sem);
-//					if (p_shmMsg->userPid != 0)
-//						sem_post(sem);
-//					else {
-//						p_shmMsg->userRequestOrRelease = 1;
-//						p_shmMsg->userResource = resource;
-//						p_shmMsg->userPid = getpid();
-//						sem_post(sem);
-//						requestedAResource = 1;
-//						getTime(timeVal);
-//						if (DEBUG) printf("user %s: process %d has requested resource %d at %d.%09d\n", timeVal, (int) getpid(), resource, p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
-//					}
-//
-//			}
-//
-//			else { // release a resource
-//				int releasedResource = 0;
-//
-//				// first find a resource to release
-//				for (int i = 0; i < MAX_RESOURCES; i++) {
-//					if (p_shmMsg->pcb[pcbIndex].resources[i] != 0) {
-//						releasedResource = p_shmMsg->pcb[pcbIndex].resources[i];
-//						break;
-//					}
-//				}
-
-//				// send order to release resource
-//				if (releasedResource) {
-//
-//					release_resource(releasedResource);
-//
-//					sem_wait(sem);
-//					if (p_shmMsg->userPid != 0)
-//						sem_post(sem);
-//					else {
-//						p_shmMsg->userRequestOrRelease = 2;
-//						p_shmMsg->userResource = releasedResource;
-//						p_shmMsg->userPid = getpid();
-//						sem_post(sem);
-//
-//						getTime(timeVal);
-//						printf("user %s: process %d has released resource %d\n", timeVal, (int) getpid(), releasedResource);
-//						}
-//
-//				}
-//			}
-//		}
 
 	} // end main while loop
 
-	getTime(timeVal);
-	printf("user %s: process %d escaped main while loop at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
+		getTime(timeVal);
+		printf("user %s: process %d escaped main while loop at %d.%09d\n", timeVal, (int) getpid(), p_shmMsg->ossSeconds, p_shmMsg->ossUSeconds);
 
-	sem_wait(sem);
+		sem_wait(sem);
 
-	// send total bookkeeping stats
-	p_shmMsg->pcb[pcbIndex].startUserSeconds = startSeconds;
-	p_shmMsg->pcb[pcbIndex].startUserUSeconds = startUSeconds;
-	p_shmMsg->pcb[pcbIndex].endUserSeconds = p_shmMsg->ossSeconds;
-	p_shmMsg->pcb[pcbIndex].endUserUSeconds = p_shmMsg->ossUSeconds;
+		// send total bookkeeping stats
+		p_shmMsg->pcb[pcbIndex].startUserSeconds = startSeconds;
+		p_shmMsg->pcb[pcbIndex].startUserUSeconds = startUSeconds;
+		p_shmMsg->pcb[pcbIndex].endUserSeconds = p_shmMsg->ossSeconds;
+		p_shmMsg->pcb[pcbIndex].endUserUSeconds = p_shmMsg->ossUSeconds;
 
-	// report process termination to oss
-	p_shmMsg->userHaltSignal = 1;
-	p_shmMsg->userPid = (int) getpid();
+		// report process termination to oss
+		p_shmMsg->userHaltSignal = 1;
+		p_shmMsg->userPid = (int) getpid();
 
-	sem_post(sem);
+		sem_post(sem);
 
-	// clean up shared memory
-	shmdt(p_shmMsg);
+		// clean up shared memory
+		shmdt(p_shmMsg);
 
-	// close semaphore
-	close_semaphore(sem);
+		// close semaphore
+		close_semaphore(sem);
 
-	getTime(timeVal);
+		getTime(timeVal);
 	if (DEBUG) printf("user %s: process %d (#%d) exiting normally\n", timeVal, (int) getpid(), childId);
+	}
+	exit(0);
 }
-exit(0);
-}
 
-
-// this part should occur within the critical section if
-// implemented correctly since it accesses shared resources
-void do_work(int willRunForThisLong) {
-
-	getTime(timeVal);
-	printf("user %s: process %d doing work for %d nanoseconds\n", timeVal, (int) getpid(), willRunForThisLong);
-
-	struct timespec sleeptime;
-	sleeptime.tv_sec = 0;
-	sleeptime.tv_nsec = willRunForThisLong;
-	nanosleep(&sleeptime, NULL); // we are doing "work" here
-
-	getTime(timeVal);
-	printf("user %s: process %d done doing work\n", timeVal, (int) getpid());
-
-}
 
 void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset) {
 	const int oneBillion = 1000000000;
@@ -284,50 +188,3 @@ void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset) {
 int get_random(int modulus) {
 	return rand() % modulus;
 }
-
-//int insert_resource(int resource) {
-//	int status = 0;
-//	if (VERBOSE && DEBUG) printf("user: process %d resource block (request): ", (int) getpid());
-//	for (int i = 0; i < MAX_RESOURCES; i++) {
-//		if (status == 0 && p_shmMsg->pcb[pcbIndex].resources[i] == 0) {
-//			p_shmMsg->pcb[pcbIndex].resources[i] = resource;
-//			status = 1;
-//			if (VERBOSE && DEBUG) printf("%d,", p_shmMsg->pcb[pcbIndex].resources[i]);
-//		} else {
-//			if (VERBOSE && DEBUG) printf("%d,", p_shmMsg->pcb[pcbIndex].resources[i]);
-//		}
-//	}
-//	if (VERBOSE && DEBUG) printf("\n");
-//	return status;
-//}
-//
-//void release_resource(int resource) {
-//	int status = 0;
-//	if (VERBOSE && DEBUG) printf("user: process %d resource block (release): ", (int) getpid());
-//	for (int i = 0; i < MAX_RESOURCES; i++) {
-//		if (VERBOSE && DEBUG) printf("%d,", p_shmMsg->pcb[pcbIndex].resources[i]);
-//		if (status == 0 && p_shmMsg->pcb[pcbIndex].resources[i] == resource) {
-//			p_shmMsg->pcb[pcbIndex].resources[i] = 0;
-//			status = 1;
-//			int resourceIndex = (int) (resource/100);
-//			if (1|| VERBOSE && DEBUG) printf("user: process %d decrementing resource index: %d\n", (int) getpid(), resourceIndex);
-//			p_shmMsg->resourcesGrantedCount[resourceIndex]--;
-//		}
-//	}
-//	if (VERBOSE && DEBUG) printf("\n");
-//}
-//
-//void init_resources() {
-//	for (int i = 0; i < MAX_RESOURCES; i++) {
-//		p_shmMsg->pcb[pcbIndex].resources[i] = 0;
-//	}
-//}
-//
-//int count_resources() {
-//	int count = 0;
-//	for (int i = 0; i < MAX_RESOURCES; i++) {
-//		if (p_shmMsg->pcb[pcbIndex].resources[i] != 0)
-//			count++;
-//	}
-//	return count;
-//}
