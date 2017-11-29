@@ -37,16 +37,21 @@ void printPageTable(SmStruct *p_shmMsg) {
 	printf("\n");
 
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
-		if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_EMPTY)
+		if (p_shmMsg->pageTableSecondChanceBit[i] == PAGE_SECOND_CHANCE_EMPTY)
 			printf(".");
-		else if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_RECENTLY_USED)
+		else if (p_shmMsg->pageTableSecondChanceBit[i] == PAGE_SECOND_CHANCE_RECENTLY_USED)
 			printf("1");
-		else if (p_shmMsg->pageStatus[i] == PAGE_SECOND_CHANCE_RECLAIMABLE)
+		else if (p_shmMsg->pageTableSecondChanceBit[i] == PAGE_SECOND_CHANCE_RECLAIMABLE)
 			printf("0");
 		else
 			printf("X");
 	}
 	printf("\n");
+//
+//	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
+//		printf("%d", p_shmMsg->pageTableSecondChanceBit[i]);
+//	}
+//		printf("\n");
 }
 
 int pageTableIsNearLimit(SmStruct *p_shmMsg) {
