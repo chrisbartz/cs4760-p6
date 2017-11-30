@@ -19,7 +19,7 @@
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
 #define BINARY_CHOICE 2
 #define MAX_RESOURCE_WAIT 100 * 1000 * 1000
-#define MAX_LUCKY_NUMBER 25
+#define MAX_LUCKY_NUMBER 50
 
 
 SmStruct shmMsg;
@@ -124,7 +124,7 @@ if (childId < 0) {
 //			if (0 && DEBUG && VERBOSE) printf("user %s: process %d has detected a memory request for page %d has been made\n", timeVal, (int) getpid(), p_shmMsg->pcb[pcbIndex].requestedPage);
 
 		} else { // check to see if a memory request should be made
-			if (getUnixTime() % 17 == 0) { // try a better pseudo random number - had no luck with srand()
+			if ((getUnixTime() + (int)getpid()) % 3 == 0) { // try a better pseudo random number - had no luck with srand()
 				int request = getUnixTime() % MAX_USER_SYSTEM_MEMORY;
 				getTime(timeVal);
 				if (DEBUG && VERBOSE) printf("user %s: process %d has made a memory request for page %d\n", timeVal, (int) getpid(), request);
@@ -211,5 +211,5 @@ void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset) {
 }
 
 int get_random(int modulus) {
-	return getUnixTime() % modulus;
+	return rand() % modulus;
 }

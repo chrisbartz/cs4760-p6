@@ -7,6 +7,7 @@
 #include "sharedMemory.h"
 
 #define DEBUG 1
+#define VERBOSE 0
 
 sem_t* open_semaphore(int createSemaphore) {
 	if (DEBUG) printf("sharedMemory: Creating semaphore\n");
@@ -144,7 +145,7 @@ void freeFrames(SmStruct *p_shmMsg, int pid) {
 }
 
 int scanRequests(SmStruct *p_shmMsg) {
-	if (DEBUG) printf("sharedMemory: Scanning PCBs for memory requests\n");
+	if (DEBUG && VERBOSE) printf("sharedMemory: Scanning PCBs for memory requests\n");
 
 	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
 		if (p_shmMsg->pcb[i].requestedPage != PCB_NO_REQUEST) {
@@ -153,7 +154,7 @@ int scanRequests(SmStruct *p_shmMsg) {
 		}
 	}
 
-	if (DEBUG) printf("sharedMemory: Scanning PCBs for memory requests did not yield any new requests\n");
+	if (DEBUG && VERBOSE) printf("sharedMemory: Scanning PCBs for memory requests did not yield any new requests\n");
 	return PCB_SCAN_NO_REQUESTS;
 }
 

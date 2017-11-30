@@ -21,7 +21,7 @@
 #define VERBOSE 1						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
 
-const int maxChildProcessCount = 10; // limit of total child processes spawned
+const int maxChildProcessCount = 50; // limit of total child processes spawned
 const long maxWaitInterval = 500; // limit on how many milliseconds to wait until we spawn the next child
 
 int childProcessCount = 0; // number of child processes spawned
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
 //	int maxDispatchedProcessCount = 1; // limit to number of dispatched child processes
 	int opt; // to support argument switches below
 	pid_t childpid; // store child pid
-	int maxConcSlaveProcesses = 2; // max concurrent child processes
+	int maxConcSlaveProcesses = 15; // max concurrent child processes
 	int maxOssTimeLimitSeconds = 10000; // max run time in oss seconds
 	char logFileName[50]; // name of log file
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
