@@ -21,40 +21,42 @@ The project has most requirements working or at least attempted:
 Both:
 shared memory working
 semaphores working
+DEBUG and VERBOSE are both options for logging
 
 Parent:
 OSS forks multiple children at "randomized" times
 OSS keeps a simulated clock
 OSS allocates shared memory
-OSS allocates resources (x20)
-OSS keeps track of total CPU time
-OSS keeps track of resource requests (unavailable resource requests are put into a queue)
-OSS keeps track of resource allocation and release (with some issues - the resource management needs some work as it loses accurate count)
-OSS keeps resource "descriptors" in shared memory
-OSS DOES NOT have sharable resources - ran out of time with other issues
-OSS initializes resources with 10 qty available
-OSS forks at random times between 1 and 500 ms
-OSS limits the number of child processes to 18 by default
-OSS grants resources to child processes as long as there are resources available (otherwise queues the requests)
-OSS ATTEMPTED to resolve deadlocks but ran out of time dealing with issues to fully implement
-OSS prints a resource map every so many requests
-OSS DOES NOT release all resources by terminated children (I thought I wrote a function for this but might have been causing some seg faults)
-OSS policy to resolve deadlocks was kill all deadlocked processes
-OSS limits run time to 2 real seconds
-OSS keeps track of statistics during run time including # requests granted, # resources terminate normally 
-OSS DOES NOT keep track of # processes terminated by deadlock detection, how many times deadlock detection was run because that was not completed
-OSS sends SIGTERM to all processes on SIGINT
-OSS cleanup of shared memory continues to be a problem
+OSS allocates memory
+OSS utilizes a second change algorithm to manage memory requests
+OSS invokes a routine to handle frame maintenance when the free frames fall below a threshold
+OSS mainenance routine marks frames for replacement
+OSS keeps track of dirty bits as well (requiring write back to disk)
+OSS implements a page table with dirty bit and second chance bit
+OSS limits overall system memory to 256K
+OSS utilizes a bit array to keep track of allocated frames
+OSS has a macro to specify the maximum number of processes as well as the default
+OSS monitors memory requests from USER processes
+OSS determines if memory requests result in a page fault (15 ms) or no page fault (10 ns) and increments time
+**OSS has not implemented queueing for memory requests
+OSS checks whether a process has permission on a frame (all frames are private to 1 process)
+**OSS does not yet log process termination
+**OSS does not yet log memory access time
+OSS prints memory map at intervals < 1 sec
+
+
 
 
 Children:
-USER requests resources at random times
-USER has a bound on when a process can request or release a resource constrained by random selection
-USER requests resources through shared memory
-USER waits for requested resources to be allocated 
-USER sends message when halted/terminated to OSS 
-USER checks to see if it should terminate at random times
-USER 
+USER maintains a memory limit of 32K for each instance 
+USER processes request memory from OSS
+USER processes suspend operation after a request
+USER processes utilize semaphore for requests
+USER processes generate memory references as an int byte address bounded by USER memory limit
+**USER does not generate separate reads or write requests to memory
+USER processes wait for a response from OSS
+USER processes are self terminating based on # of requests
+
 
 Others:
 project is available in Github

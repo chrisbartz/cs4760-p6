@@ -48,6 +48,7 @@ int get_random(int modulus);
 int main(int argc, char *argv[]) {
 childId = atoi(argv[0]); // saves the child id passed from the parent process
 pcbIndex = atoi(argv[1]); // saves the pcb index passed from the parent process
+int requestCount = 0;
 
 getTime(timeVal);
 if (DEBUG && VERBOSE) printf("user %s: PCBINDEX: %d\n", timeVal, pcbIndex);
@@ -132,6 +133,7 @@ if (childId < 0) {
 				sem_wait(sem);
 				requestMemoryPage(p_shmMsg, pcbIndex, request);
 				sem_post(sem);
+				requestCount++;
 			}
 		}
 
@@ -174,6 +176,7 @@ if (childId < 0) {
 		p_shmMsg->pcb[pcbIndex].startUserUSeconds = startUSeconds;
 		p_shmMsg->pcb[pcbIndex].endUserSeconds = p_shmMsg->ossSeconds;
 		p_shmMsg->pcb[pcbIndex].endUserUSeconds = p_shmMsg->ossUSeconds;
+		p_shmMsg->pcb[pcbIndex].totalRequestCount = requestCount;
 
 		// report process termination to oss
 		p_shmMsg->userHaltSignal = 1;

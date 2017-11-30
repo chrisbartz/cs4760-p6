@@ -20,6 +20,8 @@
 #define DEBUG 1							// setting to 1 greatly increases number of logging events
 #define VERBOSE 1						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
+#define PROCESS_LIMIT 18				// hard limit on number of processes
+#define PROCESSES 12					// default number of processes to use
 
 const int maxChildProcessCount = 50; // limit of total child processes spawned
 const long maxWaitInterval = 500; // limit on how many milliseconds to wait until we spawn the next child
@@ -68,7 +70,7 @@ int main(int argc, char *argv[]) {
 //	int maxDispatchedProcessCount = 1; // limit to number of dispatched child processes
 	int opt; // to support argument switches below
 	pid_t childpid; // store child pid
-	int maxConcSlaveProcesses = 15; // max concurrent child processes
+	int maxConcSlaveProcesses = PROCESSES; // max concurrent child processes
 	int maxOssTimeLimitSeconds = 10000; // max run time in oss seconds
 	char logFileName[50]; // name of log file
 	strncpy(logFileName, "log.out", sizeof(logFileName)); // set default log file name
@@ -82,7 +84,7 @@ int main(int argc, char *argv[]) {
 	int nextChildTimeUSeconds; // save the next scheduled time for a child to be spawned
 
 	int currentPageTableReference = 0;
-
+	int procs = 0;
 	//gather option flags
 	while ((opt = getopt(argc, argv, "hl:q:s:t:")) != -1) {
 		switch (opt) {
@@ -97,7 +99,11 @@ int main(int argc, char *argv[]) {
 				printf("opt q detected: %d\n", quantum);
 			break;
 		case 's': // set number of concurrent slave processes
-			maxConcSlaveProcesses = atoi(optarg);
+			procs = atoi(optarg);
+			if (procs < PROCESS_LIMIT)
+				maxConcSlaveProcesses = procs;
+			else
+				maxConcSlaveProcesses = PROCESS_LIMIT;
 			if (DEBUG)
 				printf("opt s detected: %d\n", maxConcSlaveProcesses);
 			break;

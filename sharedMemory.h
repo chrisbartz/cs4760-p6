@@ -45,6 +45,7 @@ typedef struct {
 	int endUserUSeconds;
 	int totalCpuTime;
 	int totalTimeInSystem;
+	int totalRequestCount;
 	int lastBurstLength;
 	int requestedPage;
 	int returnedPage;

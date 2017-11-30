@@ -52,18 +52,18 @@ void printPageTable(SmStruct *p_shmMsg) {
 
 int pageTableIsNearLimit(SmStruct *p_shmMsg) {
 	if (DEBUG) printf("sharedMemory: Checking if page table is near limit\n");
-	int occupiedCount = 0;
+	int usedCount = 0;
 
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
-		if (p_shmMsg->pageTable[i] > 0)
-			occupiedCount++;
+		if (p_shmMsg->pageTableSecondChanceBit[i] == PAGE_SECOND_CHANCE_RECENTLY_USED)
+			usedCount++;
 	}
 
-	if (occupiedCount > MAX_SYSTEM_MEMORY_MAINTENANCE){
-		if (DEBUG) printf("sharedMemory: Page table is near limit: %d out of %d\n", occupiedCount, MAX_SYSTEM_MEMORY_MAINTENANCE);
+	if (usedCount > MAX_SYSTEM_MEMORY_MAINTENANCE){
+		if (DEBUG) printf("sharedMemory: Page table is near limit: %d out of %d\n", usedCount, MAX_SYSTEM_MEMORY_MAINTENANCE);
 		return 1; // page table needs maintenance
 	} else {
-		if (DEBUG) printf("sharedMemory: Page table is not near limit\n");
+		if (DEBUG) printf("sharedMemory: Page table is not near limit: %d out of %d\n", usedCount, MAX_SYSTEM_MEMORY_MAINTENANCE);
 		return 0; // page table does not need maintenance
 	}
 }
