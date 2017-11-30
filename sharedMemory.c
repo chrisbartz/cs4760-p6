@@ -81,6 +81,9 @@ void pageTableMaintenance(SmStruct *p_shmMsg) {
 int findNextReclaimableFrame(SmStruct *p_shmMsg, int *currentPageTableReference) {
 	if (DEBUG) printf("sharedMemory: Finding next reclaimable frame\n");
 
+	if (*currentPageTableReference % 5 == 0)
+		printPageTable(p_shmMsg);
+
 	if (pageTableIsNearLimit(p_shmMsg)) {	// if we are get to the 90% occupied limit
 		pageTableMaintenance(p_shmMsg);		// then mark all frames reclaimable
 	}
@@ -102,7 +105,7 @@ int* incrementPageTableReference(int *currentPageTableReference) {
 }
 
 void assignFrame(SmStruct *p_shmMsg, int frameId, int pid, int pidReference) {
-	if (DEBUG) printf("sharedMemory: Assigning frame %d to pid %d\n", frameId, pid);
+	if (DEBUG) printf("sharedMemory: Assigning frame %d to pid %d page %d\n", frameId, pid, pidReference);
 
 	p_shmMsg->pageTable[frameId] = pid;
 	p_shmMsg->pageTableUserPageReference[frameId] = pidReference;
@@ -143,11 +146,14 @@ void freeFrames(SmStruct *p_shmMsg, int pid) {
 int scanRequests(SmStruct *p_shmMsg) {
 	if (DEBUG) printf("sharedMemory: Scanning PCBs for memory requests\n");
 
-	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {
-		if (p_shmMsg->pcb[i].requestedPage != 0) {
+	for (int i = 0; i < MAX_PROCESS_CONTROL_BLOCKS; i++) {
+		if (p_shmMsg->pcb[i].requestedPage != PCB_NO_REQUEST) {
+			if (DEBUG) printf("sharedMemory: Found a new memory request from pid %d for page %d\n", p_shmMsg->pcb[i].pid, p_shmMsg->pcb[i].requestedPage);
 			return i;
 		}
 	}
+
+	if (DEBUG) printf("sharedMemory: Scanning PCBs for memory requests did not yield any new requests\n");
 	return PCB_SCAN_NO_REQUESTS;
 }
 
@@ -156,6 +162,14 @@ void grantRequest(SmStruct *p_shmMsg, int pcbId) {
 
 	int request = p_shmMsg->pcb[pcbId].requestedPage;
 
-	p_shmMsg->pcb[pcbId].requestedPage = 0;
+	p_shmMsg->pcb[pcbId].requestedPage = PCB_NO_REQUEST;
 	p_shmMsg->pcb[pcbId].returnedPage = request;
 }
+
+void requestMemoryPage(SmStruct *p_shmMsg, int pcbIndex, int page) {
+	if (DEBUG) printf("sharedMemory: Pcb %d requesting memory page %d\n", pcbIndex, page);
+
+	p_shmMsg->pcb[pcbIndex].requestedPage = page;
+}
+
+

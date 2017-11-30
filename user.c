@@ -13,8 +13,8 @@
 #include "timestamp.h"
 #include "queue.h"
 
-#define DEBUG 0 			// setting to 1 greatly increases number of logging events
-#define VERBOSE 0 			// setting to 1 greatly increases number of logging events
+#define DEBUG 1 			// setting to 1 greatly increases number of logging events
+#define VERBOSE 1 			// setting to 1 greatly increases number of logging events
 #define TUNING 0
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
 #define BINARY_CHOICE 2
@@ -109,8 +109,33 @@ if (childId < 0) {
 		nanosleep(&timeperiod, NULL); // reduce the cpu load from looping
 
 		// check to see if a memory request has been granted
+		if (p_shmMsg->pcb[pcbIndex].returnedPage != PCB_NO_REQUEST) { // then request has been granted
+			getTime(timeVal);
+			if (DEBUG) printf("user %s: process %d has detected a memory request for page %d has been granted\n", timeVal, (int) getpid(), p_shmMsg->pcb[pcbIndex].returnedPage);
+
+			sem_wait(sem);
+			p_shmMsg->pcb[pcbIndex].returnedPage = PCB_NO_REQUEST;	// clear the message
+			sem_post(sem);
+		}
 
 		// check to see if a memory request has been made
+		if (p_shmMsg->pcb[pcbIndex].requestedPage != PCB_NO_REQUEST) {
+//			getTime(timeVal);
+//			if (0 && DEBUG && VERBOSE) printf("user %s: process %d has detected a memory request for page %d has been made\n", timeVal, (int) getpid(), p_shmMsg->pcb[pcbIndex].requestedPage);
+
+		} else { // check to see if a memory request should be made
+			if (getUnixTime() % 17 == 0) { // try a better pseudo random number - had no luck with srand()
+				int request = getUnixTime() % MAX_USER_SYSTEM_MEMORY;
+				getTime(timeVal);
+				if (DEBUG && VERBOSE) printf("user %s: process %d has made a memory request for page %d\n", timeVal, (int) getpid(), request);
+
+				sem_wait(sem);
+				requestMemoryPage(p_shmMsg, pcbIndex, request);
+				sem_post(sem);
+			}
+		}
+
+
 
 		// make decision about whether to terminate successfully
 		if (!(p_shmMsg->ossSeconds >= userWaitSeconds && p_shmMsg->ossUSeconds > userWaitUSeconds)) {
@@ -186,5 +211,5 @@ void increment_user_wait_values(int ossSeconds, int ossUSeconds, int offset) {
 }
 
 int get_random(int modulus) {
-	return rand() % modulus;
+	return getUnixTime() % modulus;
 }

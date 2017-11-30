@@ -24,6 +24,7 @@
 #define PAGE_SECOND_CHANCE_RECENTLY_USED 1
 #define PAGE_SECOND_CHANCE_RECLAIMABLE -1
 #define PCB_SCAN_NO_REQUESTS -1
+#define PCB_NO_REQUEST -1
 #define PAGE_FAULT 0
 #define PAGE_HIT 1
 
@@ -87,5 +88,7 @@ void freeFrames(SmStruct *p_shmMsg, int pid);
 int scanRequests(SmStruct *p_shmMsg);
 
 void grantRequest(SmStruct *p_shmMsg, int pcbId);
+
+void requestMemoryPage(SmStruct *p_shmMsg, int pcbIndex, int page);
 
 #endif /* SHAREDMEMORY_H_ */

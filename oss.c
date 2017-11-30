@@ -281,63 +281,62 @@ int main(int argc, char *argv[]) {
 			int pcbIndex = scanRequests(p_shmMsg);
 			int userPid = 0;
 			int requestedPage = 0;
-			if (pcbIndex == PCB_SCAN_NO_REQUESTS) { // if no memory requests
-				if (p_shmMsg->userPid != 0) { // check for child termination
-					pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
-					userPid = p_shmMsg->userPid;
-				} else {
-					continue; // jump back to the beginning of the loop if still waiting for message
-				}
-			} else { // we have a memory request
+
+			if (pcbIndex != PCB_SCAN_NO_REQUESTS) { // we have a memory request; handle it
 				userPid = p_shmMsg->pcb[pcbIndex].pid;
 				requestedPage = p_shmMsg->pcb[pcbIndex].requestedPage;
-			}
 
-			// if message sent
-
-			getTime(timeVal);
-			if (p_shmMsg->userPid != 0 && p_shmMsg->userHaltSignal == 1) { // process is terminating
-				if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n\n", timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
-
-				// book keeping
-				pcbUpdateStats(pcbIndex);
-				pcbUpdateTotalStats(pcbIndex);
-				pcbDelete(pcbMap, pcbIndex);
-				dispatchedProcessCount--; // because a child process is no longer dispatched
-				childProcessCount--; // because a child process completed
-
-				// release all memory frames
-				freeFrames(p_shmMsg, userPid);
-
-				// clear the child signals
-				p_shmMsg->userPid = 0;
-				p_shmMsg->userHaltSignal = 0;
-				p_shmMsg->userHaltTime = 0;
-
-			} else { // handle memory request
 				getTime(timeVal);
 				if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a memory request for page %d at my time %d.%09d\n",
-							timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
+						timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
 
 				int pageStatus = accessFrame(p_shmMsg, userPid, requestedPage);
 
 				if (pageStatus == PAGE_FAULT) {
 					getTime(timeVal);
 					if (DEBUG) printf("OSS  %s: OSS has detected a PAGE FAULT in child %d memory request for page %d at my time %d.%09d\n",
-							timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
+								timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
 
-					int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
+					int frameId = findNextReclaimableFrame(p_shmMsg,
+							&currentPageTableReference);
 					increment_clock(DISK_WAIT); // introduce delay for accessing disk
 					assignFrame(p_shmMsg, frameId, userPid, requestedPage); // write page to frame
 				} else {
-					if (DEBUG && VERBOSE) printf("OSS  %s: OSS has detected a PAGE FAULT in child %d memory request for page %d at my time %d.%09d\n",
-							timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
+					if (DEBUG && VERBOSE)
+						printf("OSS  %s: OSS has detected a PAGE HIT in child %d memory request for page %d at my time %d.%09d\n",
+								timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
 				}
 
 				grantRequest(p_shmMsg, pcbIndex); // let user process know its request has been fulfilled
 
-			}
+			} else if (p_shmMsg->userPid != 0) { // check for child termination
+				pcbIndex = pcbFindIndex(p_shmMsg->userPid); // find pcb index
+				userPid = p_shmMsg->userPid;
 
+				getTime(timeVal);
+				if (p_shmMsg->userPid != 0 && p_shmMsg->userHaltSignal == 1) { // process is terminating
+					if (DEBUG) printf("OSS  %s: Child %d is terminating at my time %d.%09d\n\n",
+								timeVal, p_shmMsg->userPid, ossSeconds, ossUSeconds);
+
+					// book keeping
+					pcbUpdateStats(pcbIndex);
+					pcbUpdateTotalStats(pcbIndex);
+					pcbDelete(pcbMap, pcbIndex);
+					dispatchedProcessCount--; // because a child process is no longer dispatched
+					childProcessCount--; // because a child process completed
+
+					// release all memory frames
+					freeFrames(p_shmMsg, userPid);
+
+					// clear the child signals
+					p_shmMsg->userPid = 0;
+					p_shmMsg->userHaltSignal = 0;
+					p_shmMsg->userHaltTime = 0;
+				}
+
+			} else {
+				continue; // jump back to the beginning of the loop if still waiting for message
+			}
 		}
 
 		getTime(timeVal);
@@ -512,8 +511,8 @@ void pcbDelete(int pcbMap[], int index) {
 	pcbMap[index] = 0;
 	p_shmMsg->pcb[index].lastBurstLength = 0;
 	p_shmMsg->pcb[index].pid = 0;
-	p_shmMsg->pcb[index].requestedPage = 0;
-	p_shmMsg->pcb[index].returnedPage = 0;
+	p_shmMsg->pcb[index].requestedPage = PCB_NO_REQUEST;
+	p_shmMsg->pcb[index].returnedPage = PCB_NO_REQUEST;
 	p_shmMsg->pcb[index].totalCpuTime = 0;
 	p_shmMsg->pcb[index].totalTimeInSystem = 0;
 
