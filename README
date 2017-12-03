@@ -14,8 +14,6 @@ arguments:
 
 Source with revision control is at https://github.com/chrisbartz/cs4760-p6
 
-%%%%%%%%%%%%% BELOW THIS LINE NEEDS TO BE UPDATED %%%%%%%%%%%%%%%
-
 The project has most requirements working or at least attempted:
 
 Both:
@@ -43,7 +41,7 @@ OSS checks whether a process has permission on a frame (all frames are private t
 **OSS does not yet log process termination
 **OSS does not yet log memory access time
 OSS prints memory map at intervals < 1 sec
-
+**OSS does not yet report statistics requested
 
 
 

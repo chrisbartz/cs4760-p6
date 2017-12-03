@@ -42,6 +42,10 @@ long long totalTurnaroundTime; // these are for the after action report
 long long totalWaitTime;
 int totalProcesses;
 long long totalCpuIdleTime;
+int totalMemoryAccesses = 0;
+int totalPageFaultCount = 0;
+int totalPageHitCount = 0;
+
 
 FILE *logFile;
 
@@ -234,14 +238,12 @@ int main(int argc, char *argv[]) {
 				strncpy(typeOfLimit, "because of real time limit (2s)", 50);
 
 			getTime(timeVal);
-			printf(
-					"\nOSS  %s: Halting %s.\nTotal Processes Spawned: %d\nTotal Processes Reporting Time: %d\nOSS Seconds(sec): %d.%09d\nStop Time(unix):    %ld\nCurrent Time(unix): %ld\n",
+			printf("\nOSS  %s: Halting %s.\nTotal Processes Spawned: %d\nTotal Processes Reporting Time: %d\nOSS Seconds(sec): %d.%09d\nStop Time(unix):    %ld\nCurrent Time(unix): %ld\n",
 					timeVal, typeOfLimit, totalChildProcessCount,
 					totalChildProcessCount, ossSeconds, ossUSeconds, timeToStop,
 					getUnixTime());
 
-			fprintf(logFile,
-					"\nOSS  %s: Halting %s.\nTotal Processes Spawned: %d\nTotal Processes Reporting Time: %d\nOSS Seconds(sec): %d.%09d\nStop Time(unix):    %ld\nCurrent Time(unix): %ld\n",
+			fprintf(logFile, "\nOSS  %s: Halting %s.\nTotal Processes Spawned: %d\nTotal Processes Reporting Time: %d\nOSS Seconds(sec): %d.%09d\nStop Time(unix):    %ld\nCurrent Time(unix): %ld\n",
 					timeVal, typeOfLimit, totalChildProcessCount,
 					totalChildProcessCount, ossSeconds, ossUSeconds, timeToStop,
 					getUnixTime());
@@ -289,6 +291,7 @@ int main(int argc, char *argv[]) {
 			int requestedPage = 0;
 
 			if (pcbIndex != PCB_SCAN_NO_REQUESTS) { // we have a memory request; handle it
+				totalMemoryAccesses++;
 				userPid = p_shmMsg->pcb[pcbIndex].pid;
 				requestedPage = p_shmMsg->pcb[pcbIndex].requestedPage;
 
@@ -299,6 +302,7 @@ int main(int argc, char *argv[]) {
 				int pageStatus = accessFrame(p_shmMsg, userPid, requestedPage);
 
 				if (pageStatus == PAGE_FAULT) {
+					totalPageFaultCount++;
 					getTime(timeVal);
 					if (DEBUG) printf("OSS  %s: OSS has detected a PAGE FAULT in child %d memory request for page %d at my time %d.%09d\n",
 								timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
@@ -308,6 +312,7 @@ int main(int argc, char *argv[]) {
 					increment_clock(DISK_WAIT); // introduce delay for accessing disk
 					assignFrame(p_shmMsg, frameId, userPid, requestedPage); // write page to frame
 				} else {
+					totalPageHitCount++;
 					if (DEBUG && VERBOSE)
 						printf("OSS  %s: OSS has detected a PAGE HIT in child %d memory request for page %d at my time %d.%09d\n",
 								timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
@@ -559,17 +564,31 @@ void pcbUpdateTotalStats(int pcbIndex) {
 }
 
 void pcbDisplayTotalStats() {
+	const int oneBillion = 1000000000;
 	if (DEBUG) printf("Total Turnaround Time(usec): %lli\nTotal Wait Time(usec): %lli\nTotal Processes: %d\nCPU Idle Time(usec): %lli\n",
 				totalTurnaroundTime,
 				totalWaitTime, totalProcesses, totalCpuIdleTime);
 	printf("Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
-//	printf("Resources Requested: %d\nResources Granted: %d\nResource Requests Queued: %d\nResources Released: %d\n\n",
-//				resourceRequests, resourcesGranted, resourcesQueued, resourceReleases);
 	fprintf(logFile,"Average Turnaround Time(usec): %lli\nAverage Wait Time(usec): %lli\nCPU Idle Time(usec): %lli\n\n",
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
+
+	double numberOfSeconds = 0;
+	numberOfSeconds += ossSeconds;
+	numberOfSeconds += (double) ossUSeconds / oneBillion;
+
+	printf("Number of Memory Accesses per Second: %f\nNumber of Page Faults per Memory Access: %f\nAverage Memory Access Speed: %f\nThroughput: %f\n",
+			(double) totalMemoryAccesses / numberOfSeconds,
+			(double) totalPageFaultCount / totalMemoryAccesses,
+			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / oneBillion,
+			(double) totalMemoryAccesses / numberOfSeconds);
+	fprintf(logFile, "Number of Memory Accesses per Second: %f\nNumber of Page Faults per Memory Access: %f\nAverage Memory Access Speed: %f\nThroughput: %f\n",
+			(double) totalMemoryAccesses / numberOfSeconds,
+			(double) totalPageFaultCount / totalMemoryAccesses,
+			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / oneBillion,
+			(double) totalMemoryAccesses / numberOfSeconds);
 }
 
 void killProcess(int pid) {
