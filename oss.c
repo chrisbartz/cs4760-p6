@@ -171,30 +171,6 @@ int main(int argc, char *argv[]) {
 
 	printPageTable(p_shmMsg);
 
-
-//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-//	printf("Next Page Table Reference: %d\n", *incrementPageTableReference(&currentPageTableReference));
-//	printf("Next Page Table Reference: %d\n", findNextReclaimableFrame(p_shmMsg, &currentPageTableReference));
-//
-//	int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
-//
-//	assignFrame(p_shmMsg, frameId, 1234, 1);
-//	accessFrame(p_shmMsg, 1234, 1); // should be a page hit
-//	accessFrame(p_shmMsg, 1234, 2); // should be a page fault
-//
-//	printPageTable(p_shmMsg);
-//
-//	pageTableMaintenance(p_shmMsg);
-//
-//	printPageTable(p_shmMsg);
-//
-//	freeFrames(p_shmMsg, 1234);
-//
-//	printPageTable(p_shmMsg);
-
 	// create semaphore
 	sem = open_semaphore(1);
 
@@ -289,17 +265,19 @@ int main(int argc, char *argv[]) {
 			int pcbIndex = scanRequests(p_shmMsg);
 			int userPid = 0;
 			int requestedPage = 0;
+			int readWrite = -1;
 
 			if (pcbIndex != PCB_SCAN_NO_REQUESTS) { // we have a memory request; handle it
 				totalMemoryAccesses++;
 				userPid = p_shmMsg->pcb[pcbIndex].pid;
 				requestedPage = p_shmMsg->pcb[pcbIndex].requestedPage;
+				readWrite = p_shmMsg->pcb[pcbIndex].requestedPageReadWrite;
 
 				getTime(timeVal);
 				if (DEBUG) printf("OSS  %s: OSS has detected child %d has sent a memory request for page %d at my time %d.%09d\n",
 						timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
 
-				int pageStatus = accessFrame(p_shmMsg, userPid, requestedPage);
+				int pageStatus = accessFrame(p_shmMsg, userPid, requestedPage, readWrite);
 
 				if (pageStatus == PAGE_FAULT) {
 					totalPageFaultCount++;
@@ -564,7 +542,6 @@ void pcbUpdateTotalStats(int pcbIndex) {
 }
 
 void pcbDisplayTotalStats() {
-	const int oneBillion = 1000000000;
 	if (DEBUG) printf("Total Turnaround Time(usec): %lli\nTotal Wait Time(usec): %lli\nTotal Processes: %d\nCPU Idle Time(usec): %lli\n",
 				totalTurnaroundTime,
 				totalWaitTime, totalProcesses, totalCpuIdleTime);
@@ -575,19 +552,20 @@ void pcbDisplayTotalStats() {
 			totalTurnaroundTime / totalProcesses,
 			totalWaitTime / totalProcesses, totalCpuIdleTime);
 
+	const int oneBillion = 1000000000;
 	double numberOfSeconds = 0;
 	numberOfSeconds += ossSeconds;
 	numberOfSeconds += (double) ossUSeconds / oneBillion;
 
-	printf("Number of Memory Accesses per Second: %f\nNumber of Page Faults per Memory Access: %f\nAverage Memory Access Speed: %f\nThroughput: %f\n",
+	printf("Number of Memory Accesses per Second: %.3f\nNumber of Page Faults per Memory Access: %.3f\nAverage Memory Access Speed: %.3f\nThroughput: %.3f KB/Second\n",
 			(double) totalMemoryAccesses / numberOfSeconds,
 			(double) totalPageFaultCount / totalMemoryAccesses,
-			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / oneBillion,
+			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / (totalMemoryAccesses * oneBillion),
 			(double) totalMemoryAccesses / numberOfSeconds);
-	fprintf(logFile, "Number of Memory Accesses per Second: %f\nNumber of Page Faults per Memory Access: %f\nAverage Memory Access Speed: %f\nThroughput: %f\n",
+	fprintf(logFile, "Number of Memory Accesses per Second: %.3f\nNumber of Page Faults per Memory Access: %.3f\nAverage Memory Access Speed: %.3f\nThroughput: %.3f KB/Second\n",
 			(double) totalMemoryAccesses / numberOfSeconds,
 			(double) totalPageFaultCount / totalMemoryAccesses,
-			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / oneBillion,
+			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / (totalMemoryAccesses * oneBillion),
 			(double) totalMemoryAccesses / numberOfSeconds);
 }
 

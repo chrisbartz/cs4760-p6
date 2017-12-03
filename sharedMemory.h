@@ -27,6 +27,8 @@
 #define PCB_NO_REQUEST -1
 #define PAGE_FAULT 0
 #define PAGE_HIT 1
+#define READ 0
+#define WRITE 1
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -37,6 +39,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
+#include "timestamp.h"
 
 typedef struct {
 	int startUserSeconds;
@@ -48,6 +51,7 @@ typedef struct {
 	int totalRequestCount;
 	int lastBurstLength;
 	int requestedPage;
+	int requestedPageReadWrite;
 	int returnedPage;
 	int pid;
 	int pages[MAX_USER_SYSTEM_MEMORY];
@@ -82,7 +86,7 @@ int* incrementPageTableReference(int *currentPageTableReference);
 
 void assignFrame(SmStruct *p_shmMsg, int frameId, int pid, int pidReference);
 
-int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference);
+int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference, int readWrite);
 
 void freeFrames(SmStruct *p_shmMsg, int pid);
 

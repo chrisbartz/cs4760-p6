@@ -115,13 +115,14 @@ void assignFrame(SmStruct *p_shmMsg, int frameId, int pid, int pidReference) {
 
 }
 
-int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference) {
+int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference, int readWrite) {
 	if (DEBUG) printf("sharedMemory: Pid %d attempting to access frame with pidReference %d\n", pid, pidReference);
 
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {															// check to see if page is in memory
 		if (p_shmMsg->pageTable[i] == pid && p_shmMsg->pageTableUserPageReference[i] == pidReference) {
 			printf("sharedMemory: PAGE HIT: Pid %d successfully accessed a page that is assigned pidReference %d\n", pid, pidReference); // if found
-			p_shmMsg->pageStatus[i] = PAGE_STATUS_DIRTY;
+			if (readWrite == WRITE) // only set dirty bit on write
+				p_shmMsg->pageStatus[i] = PAGE_STATUS_DIRTY;
 			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_RECENTLY_USED;
 			return 1;
 		}
@@ -171,6 +172,12 @@ void requestMemoryPage(SmStruct *p_shmMsg, int pcbIndex, int page) {
 	if (DEBUG) printf("sharedMemory: Pcb %d requesting memory page %d\n", pcbIndex, page);
 
 	p_shmMsg->pcb[pcbIndex].requestedPage = page;
+
+	// randomly chose to READ or WRITE
+	if (getUnixTime() % 2 == 0)
+		p_shmMsg->pcb[pcbIndex].requestedPageReadWrite = READ;
+	else
+		p_shmMsg->pcb[pcbIndex].requestedPageReadWrite = WRITE;
 }
 
 

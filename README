@@ -41,7 +41,7 @@ OSS checks whether a process has permission on a frame (all frames are private t
 **OSS does not yet log process termination
 **OSS does not yet log memory access time
 OSS prints memory map at intervals < 1 sec
-**OSS does not yet report statistics requested
+OSS does report statistics requested
 
 
 
