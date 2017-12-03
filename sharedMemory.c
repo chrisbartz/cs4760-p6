@@ -120,16 +120,16 @@ int accessFrame(SmStruct *p_shmMsg, int pid, int pidReference, int readWrite) {
 
 	for (int i = 0; i < MAX_SYSTEM_MEMORY; i++) {															// check to see if page is in memory
 		if (p_shmMsg->pageTable[i] == pid && p_shmMsg->pageTableUserPageReference[i] == pidReference) {
-			printf("sharedMemory: PAGE HIT: Pid %d successfully accessed a page that is assigned pidReference %d\n", pid, pidReference); // if found
+			printf("sharedMemory: PAGE HIT: Pid %d successfully accessed a page %d in frame %d\n", pid, pidReference, i); // if found
 			if (readWrite == WRITE) // only set dirty bit on write
 				p_shmMsg->pageStatus[i] = PAGE_STATUS_DIRTY;
 			p_shmMsg->pageTableSecondChanceBit[i] = PAGE_SECOND_CHANCE_RECENTLY_USED;
-			return 1;
+			return PAGE_HIT;
 		}
 	}
 
-	printf("sharedMemory: PAGE FAULT: Pid %d attempted to access a page with pidReference %d which had to be retrieved from disk\n", pid, pidReference);
-	return 0;																								// if not found
+	printf("sharedMemory: PAGE FAULT: Pid %d accessed a page %d which had to be retrieved from disk\n", pid, pidReference);
+	return PAGE_FAULT;																								// if not found
 }
 
 void freeFrames(SmStruct *p_shmMsg, int pid) {

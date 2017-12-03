@@ -285,8 +285,7 @@ int main(int argc, char *argv[]) {
 					if (DEBUG) printf("OSS  %s: OSS has detected a PAGE FAULT in child %d memory request for page %d at my time %d.%09d\n",
 								timeVal, p_shmMsg->pcb[pcbIndex].pid, p_shmMsg->pcb[pcbIndex].requestedPage, ossSeconds, ossUSeconds);
 
-					int frameId = findNextReclaimableFrame(p_shmMsg,
-							&currentPageTableReference);
+					int frameId = findNextReclaimableFrame(p_shmMsg, &currentPageTableReference);
 					increment_clock(DISK_WAIT); // introduce delay for accessing disk
 					assignFrame(p_shmMsg, frameId, userPid, requestedPage); // write page to frame
 				} else {

@@ -126,7 +126,7 @@ if (childId < 0) {
 
 		} else { // check to see if a memory request should be made
 			if ((getUnixTime() + (int)getpid()) % 3 == 0) { // try a better pseudo random number - had no luck with srand()
-				int request = getUnixTime() % MAX_USER_SYSTEM_MEMORY;
+				int request = rand() % MAX_USER_SYSTEM_MEMORY;
 				getTime(timeVal);
 				if (DEBUG && VERBOSE) printf("user %s: process %d has made a memory request for page %d\n", timeVal, (int) getpid(), request);
 
