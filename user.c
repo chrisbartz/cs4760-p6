@@ -13,8 +13,8 @@
 #include "timestamp.h"
 #include "queue.h"
 
-#define DEBUG 1 			// setting to 1 greatly increases number of logging events
-#define VERBOSE 1 			// setting to 1 greatly increases number of logging events
+#define DEBUG 0 			// setting to 1 greatly increases number of logging events
+#define VERBOSE 0 			// setting to 1 greatly increases number of logging events
 #define TUNING 0
 #define MAX_WORK_INTERVAL 75 * 1000 * 1000 // max time to work
 #define BINARY_CHOICE 2

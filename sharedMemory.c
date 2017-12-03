@@ -6,7 +6,7 @@
 
 #include "sharedMemory.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #define VERBOSE 0
 
 sem_t* open_semaphore(int createSemaphore) {

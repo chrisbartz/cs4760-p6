@@ -17,8 +17,8 @@
 #include "timestamp.h"
 #include "queue.h"
 
-#define DEBUG 1							// setting to 1 greatly increases number of logging events
-#define VERBOSE 1						// setting to 1 makes it even worse than DEBUG
+#define DEBUG 0							// setting to 1 greatly increases number of logging events
+#define VERBOSE 0						// setting to 1 makes it even worse than DEBUG
 #define TUNING 0						// tuning related messages
 #define PROCESS_LIMIT 18				// hard limit on number of processes
 #define PROCESSES 12					// default number of processes to use
@@ -557,16 +557,16 @@ void pcbDisplayTotalStats() {
 	numberOfSeconds += ossSeconds;
 	numberOfSeconds += (double) ossUSeconds / oneBillion;
 
-	printf("Number of Memory Accesses per Second: %.3f\nNumber of Page Faults per Memory Access: %.3f\nAverage Memory Access Speed: %.3f\nThroughput: %.3f KB/Second\n",
-			(double) totalMemoryAccesses / numberOfSeconds,
+	printf("Number of Memory Accesses per Second: %.3f\nNumber of Page Faults per Memory Access: %.3f\nAverage Memory Access Speed: %.3f Seconds\nThroughput: %.3f KB/Second\n",
+			(double) (totalPageFaultCount + totalPageHitCount) / numberOfSeconds,
 			(double) totalPageFaultCount / totalMemoryAccesses,
-			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / (totalMemoryAccesses * oneBillion),
-			(double) totalMemoryAccesses / numberOfSeconds);
-	fprintf(logFile, "Number of Memory Accesses per Second: %.3f\nNumber of Page Faults per Memory Access: %.3f\nAverage Memory Access Speed: %.3f\nThroughput: %.3f KB/Second\n",
-			(double) totalMemoryAccesses / numberOfSeconds,
+			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / ((totalPageFaultCount + totalPageHitCount) * oneBillion),
+			(double) (totalPageFaultCount + totalPageHitCount) / numberOfSeconds);
+	fprintf(logFile, "Number of Memory Accesses per Second: %.3f\nNumber of Page Faults per Memory Access: %.3f\nAverage Memory Access Speed: %.3f Seconds\nThroughput: %.3f KB/Second\n",
+			(double) (totalPageFaultCount + totalPageHitCount) / numberOfSeconds,
 			(double) totalPageFaultCount / totalMemoryAccesses,
-			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / (totalMemoryAccesses * oneBillion),
-			(double) totalMemoryAccesses / numberOfSeconds);
+			(double) ((totalPageFaultCount * DISK_WAIT) + (totalPageHitCount * NO_PAGE_WAIT)) / ((totalPageFaultCount + totalPageHitCount) * oneBillion),
+			(double) (totalPageFaultCount + totalPageHitCount) / numberOfSeconds);
 }
 
 void killProcess(int pid) {
