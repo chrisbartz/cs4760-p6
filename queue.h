@@ -1,7 +1,7 @@
 //Christopher Bartz
 //cyb01b
 //CS4760 S02
-//Project 5
+//Project 6
 
 #ifndef QUEUE_H_
 #define QUEUE_H_
